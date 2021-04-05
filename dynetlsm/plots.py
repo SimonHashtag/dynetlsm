@@ -738,8 +738,17 @@ def plot_latent_space_lpcm(model, t=0, estimate_type='best',
             x1 = X[t, i]
             x2 = X[t, j]
 
-            if model.is_directed:
+            if model.is_directed and use_radii:
                 arrow_patch(x1, x2, sizes[i], sizes[j], ax,
+                            color=colors[encoder.transform([z[t, i]])[0]],
+                            alpha=alpha,
+                            connectionstyle=connectionstyle,
+                            linewidth=linewidth,
+                            mutation_scale=mutation_scale,
+                            arrowstyle=arrowstyle,
+                            zorder=1)
+            elif model.is_directed:
+                arrow_patch(x1, x2, sizes, sizes, ax,
                             color=colors[encoder.transform([z[t, i]])[0]],
                             alpha=alpha,
                             connectionstyle=connectionstyle,
