@@ -4,7 +4,7 @@ import scipy.stats as stats
 from math import floor, ceil
 
 from statsmodels.regression.linear_model import yule_walker
-from arviz.stats.diagnostics import geweke
+#from arviz.stats.diagnostics import geweke
 
 
 def mean_detrend(x):
