@@ -19,11 +19,12 @@ cdef inline double expit(double z):
     return 1. / (1. + exp(-z))
 
 
-def directed_intercept_grad(DOUBLE[:, :, :] Y,
+def directed_weighted_intercept_grad(DOUBLE[:, :, :] Y,
                             DOUBLE[:, :, :] dist,
                             DOUBLE[:] radii,
                             double intercept_in,
-                            double intercept_out):
+                            double intercept_out,
+                            double sigma):
     cdef int i, j, t = 0
     cdef int n_time_steps = Y.shape[0]
     cdef int n_nodes = Y.shape[1]
@@ -37,7 +38,10 @@ def directed_intercept_grad(DOUBLE[:, :, :] Y,
                     d_in = (1 - dist[t, i, j] / radii[j])
                     d_out = (1 - dist[t, i, j] / radii[i])
                     eta = intercept_in * d_in + intercept_out * d_out
-                    step = Y[t, i, j] - expit(eta)
+                    if Y[t, i, j] > 0:
+                        step = (Y[t, i, j] - eta)/sigma**2
+                    else:
+                        step = (-stats.norm.pdf(eta/sigma)/sigma)/(1-stats.norm.cdf(eta/sigma))
 
                     in_grad += d_in * step
                     out_grad += d_out * step
@@ -72,18 +76,18 @@ def directed_weighted_partial_loglikelihood(DOUBLE[:, ::1] Y,
                 dist = sqrt(dist)
 
             # Y_ijt
-            E_Y_star = intercept_in * (1 - dist / radii[j]) + intercept_out * (1 - dist / radii[node_id])
+            eta = intercept_in * (1 - dist / radii[j]) + intercept_out * (1 - dist / radii[node_id])
             if Y[node_id, j] > 0:
-                loglik += -log(sigma) - 1/2 * log(2*pi) - 1/2((Y[node_id, j] - E_Y_star)/sigma)**2
+                loglik += -log(sigma) - 1/2 * log(2*pi) - 1/2((Y[node_id, j] - eta)/sigma)**2
             else:
-                loglik += log(1 - stats.norm.cdf(E_Y_star/sigma))
+                loglik += log(1 - stats.norm.cdf(eta/sigma))
 
             # Y_jit
-            E_Y_star = intercept_in * (1 - dist / radii[node_id]) + intercept_out * (1 - dist / radii[j])
+            eta = intercept_in * (1 - dist / radii[node_id]) + intercept_out * (1 - dist / radii[j])
             if Y[node_id, j] > 0:
-                loglik += -log(sigma) - 1/2 * log(2*pi) - 1/2((Y[j, node_id] - E_Y_star)/sigma)**2
+                loglik += -log(sigma) - 1/2 * log(2*pi) - 1/2((Y[j, node_id] - eta)/sigma)**2
             else:
-                loglik += log(1 - stats.norm.cdf(E_Y_star/sigma))
+                loglik += log(1 - stats.norm.cdf(eta/sigma))
 
     return loglik
 
@@ -209,11 +213,11 @@ def directed_weighted_network_loglikelihood_fast(DOUBLE[:, :, ::1] Y,
                 if i != j:
                     d_in = (1 - dist[t, i, j] / radii[j])
                     d_out = (1 - dist[t, i, j] / radii[i])
-                    E_Y_star = intercept_in * d_in + intercept_out * d_out
+                    eta = intercept_in * d_in + intercept_out * d_out
                     if Y[t, i, j] > 0:
-                        loglik += -log(sigma) - 1/2 * log(2*pi) - 1/2((Y[t, i, j] - E_Y_star)/sigma)**2
+                        loglik += -log(sigma) - 1/2 * log(2*pi) - 1/2((Y[t, i, j] - eta)/sigma)**2
                     else:
-                        loglik += log(1 - stats.norm.cdf(E_Y_star/sigma))
+                        loglik += log(1 - stats.norm.cdf(eta/sigma))
 
     return loglik
 
