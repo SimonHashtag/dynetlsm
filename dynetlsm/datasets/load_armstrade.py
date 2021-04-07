@@ -108,9 +108,9 @@ def importData(filename:str, weighted:bool = False, minimal: bool = True, dropco
             adjMatrix = nx.to_numpy_array(G, weight='TIV delivery values', nodelist = nodelist)
         else:
             deals = deals.value_counts(['Seller', 'Buyer']).reset_index(name='Number of deals')
-            G = nx.from_pandas_edgelist(deals, 'Seller', 'Buyer', edge_attr='Number of deals',
+            G = nx.from_pandas_edgelist(deals, 'Seller', 'Buyer', edge_attr=None,
                                         create_using=nx.DiGraph())
-            adjMatrix = nx.to_numpy_array(G, weight='Number of deals', nodelist = nodelist)
+            adjMatrix = nx.to_numpy_array(G, weight=None, nodelist = nodelist)
         file_fmt = 'AdjacencyMatrix_{}.npy'
         adjPath = join(dataPath, file_fmt.format(year))
         np.save(adjPath, adjMatrix)
