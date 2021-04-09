@@ -119,3 +119,28 @@ def sample_radii(Y, X, intercepts, radii, sampler, dist=None,
         return loglik
 
     return sampler.step(radii, logp, rng)
+
+def sample_sigma(Y, X, delta, tau, intercepts, radii, sigma, sampler, dist=None,
+                 case_control_sampler=None, squared=False, random_state=None):
+    rng = check_random_state(random_state)
+
+    def logp(x):
+        # sample sigma squared: distributed as inverse gamma (IG(a, b).
+        # a = 2 + delta, b = (1 + delta) * tau_squared with small delta and pos. const. tau**2
+        if case_control_sampler:
+            # TODO: Loglikelihood for case_control_sampler in weighted case
+            raise ValueError('The case-control likelihood currently only '
+                             'supported for non-weighted directed networks.')
+        else:
+            loglik = dynamic_network_loglikelihood_directed_weighted(
+                Y, X,
+                intercept_in=intercepts[0],
+                intercept_out=intercepts[1],
+                radii=radii,
+                sigma = x
+                squared=squared,
+                dist=dist)
+        loglik -= ((2 + delta) + 1)* np.log(1 / x) + ((1 + delta) * tau) / x
+        return loglik
+
+    return sampler.step(sigma, logp, rng)
