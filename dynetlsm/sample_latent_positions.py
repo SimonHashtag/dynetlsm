@@ -5,8 +5,10 @@ from sklearn.utils import check_random_state
 
 from .network_likelihoods import (
     partial_loglikelihood,
+    partial_weighted_loglikelihood,
     directed_partial_loglikelihood,
-    approx_directed_partial_loglikelihood
+    approx_directed_partial_loglikelihood,
+    directed_weighted_partial_loglikelihood
 )
 
 
@@ -90,7 +92,7 @@ def case_control_init(Y, is_directed=False, n_samples=100):
 
 
 def sample_latent_positions(Y, X, intercept, tau_sq, sigma_sq, samplers,
-                            radii=None, is_directed=False, squared=False,
+                            radii=None, nu=None, is_weighted=False, is_directed=False, squared=False,
                             case_control_sampler=None, random_state=None):
     rng = check_random_state(random_state)
     n_time_steps, n_nodes, _ = Y.shape
@@ -99,34 +101,54 @@ def sample_latent_positions(Y, X, intercept, tau_sq, sigma_sq, samplers,
         for j in range(n_nodes):
             def logp(x):
                 X[t, j] = x
-                if is_directed:
-                    if case_control_sampler is not None:
-                        loglik = approx_directed_partial_loglikelihood(
-                            X[t],
-                            radii=radii,
-                            in_edges=case_control_sampler.in_edges_[t],
-                            out_edges=case_control_sampler.out_edges_[t],
-                            degree=case_control_sampler.degrees_[t],
-                            control_nodes_in=(
-                                case_control_sampler.control_nodes_in_[t]),
-                            control_nodes_out=(
-                                case_control_sampler.control_nodes_out_[t]),
-                            intercept_in=intercept[0],
-                            intercept_out=intercept[1],
-                            node_id=j,
-                            squared=squared)
+                if is_weighted:
+                    if is_directed:
+                        if case_control_sampler is not None:
+                            # TODO: Loglikelihood for case_control_sampler in weighted case
+                            raise ValueError('The case-control likelihood currently only '
+                                             'supported for non-weighted directed networks.')
+                        else:
+                            loglik = directed_weighted_partial_loglikelihood(Y[t], X[t],
+                                                                             radii=radii,
+                                                                             intercept_in=intercept[0],
+                                                                             intercept_out=intercept[1],
+                                                                             nu=nu,
+                                                                             node_id=j,
+                                                                             squared=squared)
                     else:
-                        loglik = directed_partial_loglikelihood(
-                                    Y[t], X[t],
-                                    radii=radii,
-                                    intercept_in=intercept[0],
-                                    intercept_out=intercept[1],
-                                    node_id=j,
-                                    squared=squared)
+                        loglik = partial_weighted_loglikelihood(Y[t], X[t],
+                                                                intercept, j,
+                                                                nu=nu,
+                                                                squared=squared)
                 else:
-                    loglik = partial_loglikelihood(Y[t], X[t],
-                                                   intercept, j,
-                                                   squared=squared)
+                    if is_directed:
+                        if case_control_sampler is not None:
+                            loglik = approx_directed_partial_loglikelihood(
+                                X[t],
+                                radii=radii,
+                                in_edges=case_control_sampler.in_edges_[t],
+                                out_edges=case_control_sampler.out_edges_[t],
+                                degree=case_control_sampler.degrees_[t],
+                                control_nodes_in=(
+                                    case_control_sampler.control_nodes_in_[t]),
+                                control_nodes_out=(
+                                    case_control_sampler.control_nodes_out_[t]),
+                                intercept_in=intercept[0],
+                                intercept_out=intercept[1],
+                                node_id=j,
+                                squared=squared)
+                        else:
+                            loglik = directed_partial_loglikelihood(
+                                        Y[t], X[t],
+                                        radii=radii,
+                                        intercept_in=intercept[0],
+                                        intercept_out=intercept[1],
+                                        node_id=j,
+                                        squared=squared)
+                    else:
+                        loglik = partial_loglikelihood(Y[t], X[t],
+                                                       intercept, j,
+                                                       squared=squared)
 
                 # prior
                 if t == 0:
@@ -147,9 +169,9 @@ def sample_latent_positions(Y, X, intercept, tau_sq, sigma_sq, samplers,
 
 
 def sample_latent_positions_mixture(Y, X, intercept, mu, sigma, lmbda, z,
-                                    samplers, radii=None, is_directed=False,
-                                    squared=None, case_control_sampler=None,
-                                    random_state=None):
+                                    samplers, radii=None, nu=None, is_weighted=False,
+                                    is_directed=False, squared=None,
+                                    case_control_sampler=None, random_state=None):
     rng = check_random_state(random_state)
     n_time_steps, n_nodes, _ = Y.shape
 
@@ -157,32 +179,54 @@ def sample_latent_positions_mixture(Y, X, intercept, mu, sigma, lmbda, z,
         for j in range(n_nodes):
             def logp(x):
                 X[t, j] = x
-                if is_directed:
-                    if case_control_sampler:
-                        loglik = approx_directed_partial_loglikelihood(
-                            X[t],
-                            radii=radii,
-                            in_edges=case_control_sampler.in_edges_[t],
-                            out_edges=case_control_sampler.out_edges_[t],
-                            degree=case_control_sampler.degrees_[t],
-                            control_nodes_in=(
-                                case_control_sampler.control_nodes_in_[t]),
-                            control_nodes_out=(
-                                case_control_sampler.control_nodes_out_[t]),
-                            intercept_in=intercept[0],
-                            intercept_out=intercept[1],
-                            node_id=j,
-                            squared=squared)
+                if is_weighted:
+                    if is_directed:
+                        if case_control_sampler is not None:
+                            # TODO: Loglikelihood for case_control_sampler in weighted case
+                            raise ValueError('The case-control likelihood currently only '
+                                             'supported for non-weighted directed networks.')
+                        else:
+                            loglik = directed_weighted_partial_loglikelihood(Y[t], X[t],
+                                                                             radii=radii,
+                                                                             intercept_in=intercept[0],
+                                                                             intercept_out=intercept[1],
+                                                                             nu=nu,
+                                                                             node_id=j,
+                                                                             squared=squared)
                     else:
-                        loglik = directed_partial_loglikelihood(
-                                    Y[t], X[t],
-                                    radii=radii,
-                                    intercept_in=intercept[0],
-                                    intercept_out=intercept[1],
-                                    node_id=j)
+                        loglik = partial_weighted_loglikelihood(Y[t], X[t],
+                                                                intercept, j,
+                                                                nu=nu,
+                                                                squared=squared)
                 else:
-                    loglik = partial_loglikelihood(Y[t], X[t],
-                                                   intercept, j)
+                    if is_directed:
+                        if case_control_sampler is not None:
+                            loglik = approx_directed_partial_loglikelihood(
+                                X[t],
+                                radii=radii,
+                                in_edges=case_control_sampler.in_edges_[t],
+                                out_edges=case_control_sampler.out_edges_[t],
+                                degree=case_control_sampler.degrees_[t],
+                                control_nodes_in=(
+                                    case_control_sampler.control_nodes_in_[t]),
+                                control_nodes_out=(
+                                    case_control_sampler.control_nodes_out_[t]),
+                                intercept_in=intercept[0],
+                                intercept_out=intercept[1],
+                                node_id=j,
+                                squared=squared)
+                        else:
+                            loglik = directed_partial_loglikelihood(
+                                        Y[t], X[t],
+                                        radii=radii,
+                                        intercept_in=intercept[0],
+                                        intercept_out=intercept[1],
+                                        node_id=j,
+                                        squared=squared)
+                    else:
+                        loglik = partial_loglikelihood(Y[t], X[t],
+                                                       intercept, j,
+                                                       squared=squared)
 
                 # prior P(X_t | X_{t-1})
                 if t == 0:
