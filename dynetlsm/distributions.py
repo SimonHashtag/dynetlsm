@@ -83,6 +83,10 @@ def truncated_normal_logpdf(x, mean, var, lower=0, upper=1):
     b = (upper - mean) / std
     return truncnorm.logpdf(x, a, b, loc=mean, scale=std)
 
+def tobit_loglikelihood(x, mean, std):
+    above_lower = -np.log(std) - 1 / 2 * np.log(2 * np.pi) - 1 / 2 * ((x - mean) / std) ** 2
+    below_lower = np.log(1 - stats.norm.cdf(mean / std))
+    return np.sum(np.where(x > 0, above_lower, below_lower))
 
 def sample_dirichlet(alphas, random_state=None):
     """The numpy dirichlet sampler is numerically unstable and produces samples
