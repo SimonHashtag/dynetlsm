@@ -53,7 +53,7 @@ def dynamic_network_loglikelihood_undirected_weighted(Y, X, intercept, nu, squar
     triu_indices = triu_indices_from_3d(dist, k=1)
     eta = intercept - dist[triu_indices]
 
-    return tobit_loglikelihood(Y[triu_indices], eta, nu)
+    return tobit_loglikelihood(Y[triu_indices], eta, np.sqrt(nu))
 
 def dynamic_network_loglikelihood(model, sample_id, dist=None):
     X = model.Xs_[sample_id]
