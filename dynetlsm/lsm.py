@@ -285,12 +285,15 @@ class DynamicNetworkLSM(object):
     [1] Sewell, Daniel K., and Chen, Yuguo (2016). "Latent space models for
         dynamic networks". Journal of the American Statistical Association,
         110(512):1646-1657.
-    [2] Hoff, P.D., Raftery, A. E., and Handcock, M.S. (2002). "Latent
+    [2] Sewell, Daniel K., and Chen, Yuguo (2016). "Latent space models for
+        dynamic networks with weighted edges." Social Networks, 44: 105-116.
+    [3] Hoff, P.D., Raftery, A. E., and Handcock, M.S. (2002). "Latent
         space approaches to social network analysis". Journal of the
         American Statistical Association, 97(460):1090-1098.
     """
     def __init__(self,
                  n_features=2,
+                 is_weighted=False,
                  is_directed=False,
                  n_iter=5000,
                  tune=2500,
@@ -300,6 +303,8 @@ class DynamicNetworkLSM(object):
                  intercept_variance_prior=2.0,
                  tau_sq=2.0,
                  sigma_sq=0.1,
+                 delta = 0.05,
+                 zeta_sq = 1,
                  step_size_X=0.1,
                  step_size_intercept=0.1,
                  step_size_radii=175000,
@@ -309,9 +314,12 @@ class DynamicNetworkLSM(object):
                  random_state=None):
         self.n_iter = n_iter
         self.is_directed = is_directed
+        self.is_weighted = is_weighted
         self.n_features = n_features
         self.tau_sq = tau_sq
         self.sigma_sq = sigma_sq
+        self.delta = delta
+        self.zeta_sq = zeta_sq
         self.step_size_X = step_size_X
         self.intercept_prior = intercept_prior
         self.intercept_variance_prior = intercept_variance_prior
@@ -349,6 +357,7 @@ class DynamicNetworkLSM(object):
         """Estimated connection probability matrix,
         shape (n_time_steps, n_nodes, n_nodes).
         """
+        # TODO: probas for weighted case -> not connection prob. matrix
         if not hasattr(self, 'X_'):
             raise ValueError('Model not fit.')
 
@@ -437,9 +446,14 @@ class DynamicNetworkLSM(object):
         else:
             self.intercepts_ = np.zeros((self.n_iter, 1), dtype=np.float64)
 
+        if self.is_weighted:
+            # nu_squared
+            self.nu_ = np.zeros((self.n_iter, 1), dtype=np.float64)
+
         # initialize latent positions through GMDS
         X = generalized_mds(self.Y_fit_, n_features=self.n_features,
                             is_directed=self.is_directed,
+                            unweighted = not self.is_weighted,
                             random_state=rng)
 
         if self.is_directed:
