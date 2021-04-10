@@ -8,6 +8,7 @@ from libc.math cimport log, exp, sqrt
 
 import numpy as np
 cimport numpy as np
+import scipy.stats as stats
 
 
 ctypedef np.npy_float64 DOUBLE
@@ -26,6 +27,8 @@ def partial_loglikelihood(DOUBLE[:, :] Y,
     cdef double eta = 0
     cdef double loglik  = 0
 
+    # in-case the network is undirected
+
     for i in range(n_nodes):
         dist = 0
         eta = 0
@@ -36,10 +39,42 @@ def partial_loglikelihood(DOUBLE[:, :] Y,
                 eta = intercept - dist
             else:
                 eta = intercept - sqrt(dist)
-
-            # in-case the network is undirected
             loglik += Y[node_id, i] * eta
             loglik -= log(1 + exp(eta))
+
+    return loglik
+
+def partial_weighted_loglikelihood(DOUBLE[:, :] Y,
+                                   DOUBLE[:, :] X,
+                                   double intercept,
+                                   int node_id,
+                                   double nu,
+                                   bint squared=False):
+    cdef int i, d = 0
+    cdef int n_nodes = Y.shape[0]
+    cdef int n_features = X.shape[1]
+    cdef double pi = 3.141592653589793
+    cdef double dist = 0
+    cdef double eta = 0
+    cdef double loglik  = 0
+    cdef double std = sqrt(nu)
+
+    # in-case the network is undirected
+
+    for i in range(n_nodes):
+        dist = 0
+        eta = 0
+        if i != node_id:
+            for d in range(n_features):
+                dist += (X[i, d] - X[node_id, d]) ** 2
+            if squared:
+                eta = intercept - dist
+            else:
+                eta = intercept - sqrt(dist)
+            if Y[node_id, i] > 0:
+                loglik += -log(std) - 1/2 * log(2*pi) - 1/2*((Y[node_id, i] - eta)/std)**2
+            else:
+                loglik += log(1 - stats.norm.cdf(eta/std))
 
     return loglik
 
