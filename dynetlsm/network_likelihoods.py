@@ -39,27 +39,27 @@ def dynamic_network_loglikelihood_undirected(Y, X, intercept, squared=False,
 # TODO: mask nan entries
 def dynamic_network_loglikelihood_directed_weighted(Y, X,
                                                     intercept_in, intercept_out, radii,
-                                                    sigma, squared=False, dist=None):
+                                                    nu, squared=False, dist=None):
     dist = calculate_distances(X, squared=squared) if dist is None else dist
 
-    return directed_weighted_network_loglikelihood_fast(Y, dist, radii, intercept_in, intercept_out, sigma)
+    return directed_weighted_network_loglikelihood_fast(Y, dist, radii, intercept_in, intercept_out, nu)
 
 
 # TODO: mask nan entries
-def dynamic_network_loglikelihood_undirected_weighted(Y, X, intercept, sigma, squared=False,
+def dynamic_network_loglikelihood_undirected_weighted(Y, X, intercept, nu, squared=False,
                                              dist=None):
     dist = calculate_distances(X, squared=squared) if dist is None else dist
 
     triu_indices = triu_indices_from_3d(dist, k=1)
     eta = intercept - dist[triu_indices]
 
-    return tobit_loglikelihood(Y[triu_indices], eta, sigma)
+    return tobit_loglikelihood(Y[triu_indices], eta, nu)
 
 def dynamic_network_loglikelihood(model, sample_id, dist=None):
     X = model.Xs_[sample_id]
     intercept = model.intercepts_[sample_id]
     radii = model.radiis_[sample_id] if model.is_directed else None
-    sigma = model.sigmas_[sample_id] if model.is_weighted else None
+    nu = model.nus_[sample_id] if model.is_weighted else None
     if dist is None:
         dist = (None if model.case_control_sampler_ else
                 calculate_distances(X, squared=False))
@@ -74,10 +74,10 @@ def dynamic_network_loglikelihood(model, sample_id, dist=None):
                     model.Y_fit_, X,
                     intercept_in=intercept[0],
                     intercept_out=intercept[1],
-                    radii=radii, sigma=sigma, dist=dist)
+                    radii=radii, nu=nu, dist=dist)
         else:
             loglik = dynamic_network_loglikelihood_undirected_weighted(
-                model.Y_fit_, X, intercept=intercept, sigma=sigma, dist=dist)
+                model.Y_fit_, X, intercept=intercept, nu=nu, dist=dist)
     else:
         if model.is_directed:
             if model.case_control_sampler_ is not None:

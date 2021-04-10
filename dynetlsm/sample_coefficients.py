@@ -12,7 +12,7 @@ from .network_likelihoods import (
 
 
 def sample_intercepts(Y, X, intercepts, intercept_prior,
-                      intercept_variance_prior, samplers, radii=None, sigma=None,
+                      intercept_variance_prior, samplers, radii=None, nu=None,
                       dist=None, is_weighted=False, is_directed=False, case_control_sampler=None,
                       squared=False, random_state=None):
     rng = check_random_state(random_state)
@@ -30,7 +30,7 @@ def sample_intercepts(Y, X, intercepts, intercept_prior,
                         Y, X,
                         intercept_in=x[0], intercept_out=intercepts[1],
                         radii=radii,
-                        sigma=sigma,
+                        nu=nu,
                         squared=squared,
                         dist=dist)
                 loglik -= ((x[0] - intercept_prior[0]) ** 2 /
@@ -51,7 +51,7 @@ def sample_intercepts(Y, X, intercepts, intercept_prior,
                         Y, X,
                         intercept_in=intercepts[0], intercept_out=x[0],
                         radii=radii,
-                        sigma=sigma,
+                        nu=nu,
                         squared=squared,
                         dist=dist)
                 loglik -= ((x[0] - intercept_prior[1]) ** 2 /
@@ -63,7 +63,7 @@ def sample_intercepts(Y, X, intercepts, intercept_prior,
         else:
             def logp(x):
                 loglik = dynamic_network_loglikelihood_undirected_weighted(Y, X,
-                                                                  intercept=x, sigma=sigma,
+                                                                  intercept=x, nu=nu,
                                                                   squared=squared,
                                                                   dist=dist)
                 loglik -= ((x - intercept_prior) ** 2 /
@@ -145,7 +145,7 @@ def sample_intercepts(Y, X, intercepts, intercept_prior,
     return intercepts
 
 
-def sample_radii(Y, X, intercepts, radii, sampler, sigma=None, dist=None,
+def sample_radii(Y, X, intercepts, radii, sampler, nu=None, dist=None,
                  is_weighted=False, case_control_sampler=None, squared=False,
                  random_state=None):
     rng = check_random_state(random_state)
@@ -163,7 +163,7 @@ def sample_radii(Y, X, intercepts, radii, sampler, sigma=None, dist=None,
                     intercept_in=intercepts[0],
                     intercept_out=intercepts[1],
                     radii=x,
-                    sigma=sigma,
+                    nu=nu,
                     squared=squared,
                     dist=dist)
 
@@ -197,13 +197,13 @@ def sample_radii(Y, X, intercepts, radii, sampler, sigma=None, dist=None,
 
     return sampler.step(radii, logp, rng)
 
-def sample_sigma(Y, X, delta, tau, intercepts, radii=None, sigma, sampler, dist=None,
+def sample_nu(Y, X, delta, tau, intercepts, radii=None, nu, sampler, dist=None,
                  is_directed=False, case_control_sampler=None, squared=False, random_state=None):
     rng = check_random_state(random_state)
 
     if is_directed:
         def logp(x):
-            # sample sigma squared: distributed as inverse gamma (IG(a, b).
+            # sample nu squared: distributed as inverse gamma (IG(a, b).
             # a = 2 + delta, b = (1 + delta) * tau_squared with small delta and pos. const. tau**2
             if case_control_sampler:
                 # TODO: Loglikelihood for case_control_sampler in weighted case
@@ -215,22 +215,22 @@ def sample_sigma(Y, X, delta, tau, intercepts, radii=None, sigma, sampler, dist=
                     intercept_in=intercepts[0],
                     intercept_out=intercepts[1],
                     radii=radii,
-                    sigma = x,
+                    nu = x,
                     squared=squared,
                     dist=dist)
             loglik -= ((2 + delta) + 1)* np.log(1 / x) + ((1 + delta) * tau) / x
             return loglik
     else:
         def logp(x):
-            # sample sigma squared: distributed as inverse gamma (IG(a, b).
+            # sample nu squared: distributed as inverse gamma (IG(a, b).
             # a = 2 + delta, b = (1 + delta) * tau_squared with small delta and pos. const. tau**2
             loglik = dynamic_network_loglikelihood_undirected_weighted(
                 Y, X,
                 intercept=intercepts,
-                sigma=x,
+                nu=x,
                 squared=squared,
                 dist=dist)
             loglik -= ((2 + delta) + 1)* np.log(1 / x) + ((1 + delta) * tau) / x
             return loglik
 
-    return sampler.step(sigma, logp, rng)
+    return sampler.step(nu, logp, rng)
