@@ -21,11 +21,11 @@ cdef inline double expit(double z):
 # TODO: Directed weighted network probas for ROC AUC calculation in ..._simulation.py
 
 def directed_weighted_intercept_grad(DOUBLE[:, :, :] Y,
-                            DOUBLE[:, :, :] dist,
-                            DOUBLE[:] radii,
-                            double intercept_in,
-                            double intercept_out,
-                            double nu):
+                                     DOUBLE[:, :, :] dist,
+                                     DOUBLE[:] radii,
+                                     double intercept_in,
+                                     double intercept_out,
+                                     double nu):
     cdef int i, j, t = 0
     cdef int n_time_steps = Y.shape[0]
     cdef int n_nodes = Y.shape[1]
@@ -52,13 +52,13 @@ def directed_weighted_intercept_grad(DOUBLE[:, :, :] Y,
 
 
 def directed_weighted_partial_loglikelihood(DOUBLE[:, ::1] Y,
-                                   DOUBLE[:, ::1] X,
-                                   DOUBLE[:] radii,
-                                   double intercept_in,
-                                   double intercept_out,
-                                   double nu,
-                                   int node_id,
-                                   bint squared=False):
+                                            DOUBLE[:, ::1] X,
+                                            DOUBLE[:] radii,
+                                            double intercept_in,
+                                            double intercept_out,
+                                            double nu,
+                                            int node_id,
+                                            bint squared=False):
     cdef int j, d = 0
     cdef int n_nodes = Y.shape[0]
     cdef int n_features = X.shape[1]
@@ -96,11 +96,11 @@ def directed_weighted_partial_loglikelihood(DOUBLE[:, ::1] Y,
 
 
 def directed_weighted_network_loglikelihood_fast(DOUBLE[:, :, ::1] Y,
-                                        DOUBLE[:, :, ::1] dist,
-                                        DOUBLE[:] radii,
-                                        double intercept_in,
-                                        double intercept_out,
-                                        double nu):
+                                                 DOUBLE[:, :, ::1] dist,
+                                                 DOUBLE[:] radii,
+                                                 double intercept_in,
+                                                 double intercept_out,
+                                                 double nu):
     cdef int i, j, t = 0
     cdef int n_time_steps = Y.shape[0]
     cdef int n_nodes = Y.shape[1]
