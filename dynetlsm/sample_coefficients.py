@@ -197,7 +197,7 @@ def sample_radii(Y, X, intercepts, radii, sampler, nu=None, dist=None,
 
     return sampler.step(radii, logp, rng)
 
-def sample_nu(Y, X, delta, tau, intercepts, radii=None, nu, sampler, dist=None,
+def sample_nu(Y, X, delta, zeta_sq, intercepts, radii=None, nu, sampler, dist=None,
                  is_directed=False, case_control_sampler=None, squared=False, random_state=None):
     rng = check_random_state(random_state)
 
@@ -218,7 +218,7 @@ def sample_nu(Y, X, delta, tau, intercepts, radii=None, nu, sampler, dist=None,
                     nu = x,
                     squared=squared,
                     dist=dist)
-            loglik -= ((2 + delta) + 1)* np.log(1 / x) + ((1 + delta) * tau) / x
+            loglik -= ((2 + delta) + 1)* np.log(1 / x) + ((1 + delta) * zeta_sq) / x
             return loglik
     else:
         def logp(x):
@@ -230,7 +230,7 @@ def sample_nu(Y, X, delta, tau, intercepts, radii=None, nu, sampler, dist=None,
                 nu=x,
                 squared=squared,
                 dist=dist)
-            loglik -= ((2 + delta) + 1)* np.log(1 / x) + ((1 + delta) * tau) / x
+            loglik -= ((2 + delta) + 1)* np.log(1 / x) + ((1 + delta) * zeta_sq) / x
             return loglik
 
     return sampler.step(nu, logp, rng)
