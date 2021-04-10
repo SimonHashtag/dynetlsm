@@ -9,6 +9,7 @@ from tqdm import tqdm
 from .array_utils import (
     triu_indices_from_3d, diag_indices_from_3d, nondiag_indices_from_3d)
 from .case_control_likelihood import DirectedCaseControlSampler
+from .distributions import tobit_loglikelihood
 from .imputer import SimpleNetworkImputer
 from .latent_space import calculate_distances, generalized_mds
 from .latent_space import initialize_radii
@@ -17,84 +18,141 @@ from .metropolis import Metropolis
 from .network_likelihoods import (
     dynamic_network_loglikelihood_directed,
     dynamic_network_loglikelihood_undirected,
+    dynamic_network_loglikelihood_directed_weighted,
+    dynamic_network_loglikelihood_undirected_weighted,
     directed_network_probas,
     approx_directed_network_loglikelihood,
-    directed_intercept_grad
+    directed_intercept_grad,
+    directed_weighted_intercept_grad
 )
 from .procrustes import longitudinal_procrustes_rotation
 from .sample_latent_positions import sample_latent_positions
-from .sample_coefficients import sample_intercepts, sample_radii
+from .sample_coefficients import sample_intercepts, sample_radii, sample_nu
 
 
 __all__ = ['DynamicNetworkLSM']
 
 
-def undirected_intercept_grad(Y, X, intercept, squared=False, dist=None):
+def undirected_intercept_grad(Y, X, intercept, nu=None, is_weighted=False, squared=False, dist=None):
     dist = calculate_distances(X, squared=squared) if dist is None else dist
     eta = intercept - dist
-    grad = Y - np.exp(eta) / (1 + np.exp(eta))
+
+    if is_weighted:
+        grad = tobit_loglikelihood(x=Y, mean=eta, std=np.sqrt(nu))
+    else:
+        grad = Y - np.exp(eta) / (1 + np.exp(eta))
     return 0.5 * (np.sum(grad) - np.einsum('ikk', grad).sum())
 
 
-def scale_grad(Y, X, intercept, scale, squared=False, dist=None):
+def scale_grad(Y, X, intercept, scale, nu=None, is_weighted=False, squared=False, dist=None):
     dist = calculate_distances(X, squared=squared) if dist is None else dist
     scaled_dist = np.exp(scale) * dist
     eta = intercept - scaled_dist
-    grad = -scaled_dist * (Y - np.exp(eta) / (1 + np.exp(eta)))
+    if is_weighted:
+        grad = -scaled_dist * tobit_loglikelihood(x=Y, mean=eta, std=np.sqrt(nu))
+    else:
+        grad = -scaled_dist * (Y - np.exp(eta) / (1 + np.exp(eta)))
     return np.sum(grad) - np.einsum('ikk', grad).sum()
 
 
-def scale_intercept_mle(Y, X, squared=False, tol=1e-4):
+def scale_intercept_mle(Y, X, nu=None, is_weighted=False, squared=False, tol=1e-4):
     """Compute the conditional MLE of the intercept term."""
     dist = calculate_distances(X, squared=squared)
 
-    def logp(x):
-        scale, intercept = x[0], x[1]
-        scaled_dist = np.exp(scale) * dist
-        return -dynamic_network_loglikelihood_undirected(Y, X, intercept,
-                                                         squared=squared,
-                                                         dist=scaled_dist)
+    if is_weighted:
+        def logp(x):
+            scale, intercept = x[0], x[1]
+            scaled_dist = np.exp(scale) * dist
+            return -dynamic_network_loglikelihood_undirected_weighted(Y, X, intercept, nu,
+                                                                      squared=squared,
+                                                                      dist=scaled_dist)
 
-    def grad(x):
-        scale, intercept = x[0], x[1]
-        scaled_dist = np.exp(scale) * dist
-        return -np.array([scale_grad(Y, X, intercept, scale, squared=squared,
-                                     dist=dist),
-                          undirected_intercept_grad(Y, X, intercept,
-                                                    squared=squared,
-                                                    dist=scaled_dist)])
+        def grad(x):
+            scale, intercept = x[0], x[1]
+            scaled_dist = np.exp(scale) * dist
+            return -np.array([scale_grad(Y, X, intercept, scale, nu=nu, is_weighted=True, squared=squared,
+                                         dist=dist),
+                              undirected_intercept_grad(Y, X, intercept,
+                                                        nu=nu,
+                                                        is_weighted=True,
+                                                        squared=squared,
+                                                        dist=scaled_dist)])
+        result = minimize(fun=logp, x0=np.array([0.0, 1.0]),
+                              method='BFGS', jac=grad, tol=tol)
+        return result.x[0], result.x[1]
 
-    result = minimize(fun=logp, x0=np.array([0.0, 1.0]),
-                      method='BFGS', jac=grad, tol=tol)
+    else:
+        def logp(x):
+            scale, intercept = x[0], x[1]
+            scaled_dist = np.exp(scale) * dist
+            return -dynamic_network_loglikelihood_undirected(Y, X, intercept,
+                                                             squared=squared,
+                                                             dist=scaled_dist)
 
-    return result.x[0], result.x[1]
+        def grad(x):
+            scale, intercept = x[0], x[1]
+            scaled_dist = np.exp(scale) * dist
+            return -np.array([scale_grad(Y, X, intercept, scale, squared=squared,
+                                         dist=dist),
+                              undirected_intercept_grad(Y, X, intercept,
+                                                        squared=squared,
+                                                        dist=scaled_dist)])
+
+        result = minimize(fun=logp, x0=np.array([0.0, 1.0]),
+                          method='BFGS', jac=grad, tol=tol)
+
+        return result.x[0], result.x[1]
 
 
-def directed_intercept_mle(Y, X, radii, intercept_init=None, squared=False,
+def directed_intercept_mle(Y, X, radii, nu=None, is_weighted=False, intercept_init=None, squared=False,
                            tol=1e-4):
     """Conditional MLE for intercept_in and intercept_out"""
     dist = calculate_distances(X, squared=squared)
 
-    def logp(x):
-        intercept_in, intercept_out = x[0], x[1]
-        return -dynamic_network_loglikelihood_directed(Y, X,
-                                                       intercept_in,
-                                                       intercept_out,
-                                                       radii,
-                                                       squared=squared,
-                                                       dist=dist)
+    if is_weighted:
+        def logp(x):
+            intercept_in, intercept_out = x[0], x[1]
+            return -dynamic_network_loglikelihood_directed_weighted(Y, X,
+                                                                    intercept_in,
+                                                                    intercept_out,
+                                                                    radii,
+                                                                    nu,
+                                                                    squared=squared,
+                                                                    dist=dist)
 
-    def grad(x):
-        intercept_in, intercept_out = x[0], x[1]
-        return -directed_intercept_grad(Y, dist=dist, radii=radii,
-                                        intercept_in=intercept_in,
-                                        intercept_out=intercept_out)
+        def grad(x):
+            intercept_in, intercept_out = x[0], x[1]
+            return -directed_weighted_intercept_grad(Y, dist=dist, radii=radii,
+                                                     intercept_in=intercept_in,
+                                                     intercept_out=intercept_out,
+                                                     nu=nu)
 
-    x0 = intercept_init if intercept_init is not None else np.array([0.0, 0.0])
-    result = minimize(fun=logp, x0=x0,
-                      method='BFGS', jac=grad, tol=tol)
+        x0 = intercept_init if intercept_init is not None else np.array([0.0, 0.0])
+        result = minimize(fun=logp, x0=x0,
+                          method='BFGS', jac=grad, tol=tol)
 
-    return result.x[0], result.x[1]
+        return result.x[0], result.x[1]
+    else:
+        def logp(x):
+            intercept_in, intercept_out = x[0], x[1]
+            return -dynamic_network_loglikelihood_directed(Y, X,
+                                                           intercept_in,
+                                                           intercept_out,
+                                                           radii,
+                                                           squared=squared,
+                                                           dist=dist)
+
+        def grad(x):
+            intercept_in, intercept_out = x[0], x[1]
+            return -directed_intercept_grad(Y, dist=dist, radii=radii,
+                                            intercept_in=intercept_in,
+                                            intercept_out=intercept_out)
+
+        x0 = intercept_init if intercept_init is not None else np.array([0.0, 0.0])
+        result = minimize(fun=logp, x0=x0,
+                          method='BFGS', jac=grad, tol=tol)
+
+        return result.x[0], result.x[1]
 
 
 class DynamicNetworkLSM(object):
