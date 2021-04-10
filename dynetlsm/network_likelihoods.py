@@ -3,6 +3,7 @@ import numpy as np
 from .latent_space import calculate_distances
 from .gaussian_likelihood_fast import compute_gaussian_likelihood
 from .array_utils import triu_indices_from_3d, nondiag_indices_from_3d
+from .distributions import tobit_loglikelihood
 from .directed_likelihoods_fast import (
     directed_network_loglikelihood_fast,
     directed_partial_loglikelihood, directed_intercept_grad,
@@ -43,6 +44,17 @@ def dynamic_network_loglikelihood_directed_weighted(Y, X,
 
     return directed_weighted_network_loglikelihood_fast(Y, dist, radii, intercept_in, intercept_out, sigma)
 
+
+# TODO: mask nan entries
+def dynamic_network_loglikelihood_undirected_weighted(Y, X, intercept, sigma, squared=False,
+                                             dist=None):
+    dist = calculate_distances(X, squared=squared) if dist is None else dist
+
+    triu_indices = triu_indices_from_3d(dist, k=1)
+    eta = intercept - dist[triu_indices]
+
+    return tobit_loglikelihood(Y[triu_indices], eta, sigma)
+
 def dynamic_network_loglikelihood(model, sample_id, dist=None):
     X = model.Xs_[sample_id]
     intercept = model.intercepts_[sample_id]
@@ -64,9 +76,8 @@ def dynamic_network_loglikelihood(model, sample_id, dist=None):
                     intercept_out=intercept[1],
                     radii=radii, sigma=sigma, dist=dist)
         else:
-            # TODO: Loglikelihood for undirected network in weighted case
-            loglik = dynamic_network_loglikelihood_undirected(
-                model.Y_fit_, X, intercept, dist=dist)
+            loglik = dynamic_network_loglikelihood_undirected_weighted(
+                model.Y_fit_, X, intercept=intercept, sigma=sigma, dist=dist)
     else:
         if model.is_directed:
             if model.case_control_sampler_ is not None:
