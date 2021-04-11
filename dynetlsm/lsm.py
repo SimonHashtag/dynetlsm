@@ -308,6 +308,7 @@ class DynamicNetworkLSM(object):
                  step_size_X=0.1,
                  step_size_intercept=0.1,
                  step_size_radii=175000,
+                 step_size_nu=0.1,
                  n_control=None,
                  n_resample_control=100,
                  copy=True,
@@ -325,6 +326,7 @@ class DynamicNetworkLSM(object):
         self.intercept_variance_prior = intercept_variance_prior
         self.step_size_intercept = step_size_intercept
         self.step_size_radii = step_size_radii
+        self.step_size_nu = step_size_nu
         self.tune = tune
         self.tune_interval = tune_interval
         self.burn = burn
@@ -447,8 +449,8 @@ class DynamicNetworkLSM(object):
             self.intercepts_ = np.zeros((self.n_iter, 1), dtype=np.float64)
 
         if self.is_weighted:
-            # nu_squared
-            self.nu_ = np.zeros((self.n_iter, 1), dtype=np.float64)
+            # nu_squared (abbreviated as nu)
+            self.nus_ = np.zeros((self.n_iter, 1), dtype=np.float64)
 
         # initialize latent positions through GMDS
         X = generalized_mds(self.Y_fit_, n_features=self.n_features,
@@ -456,21 +458,45 @@ class DynamicNetworkLSM(object):
                             unweighted = not self.is_weighted,
                             random_state=rng)
 
-        if self.is_directed:
-            # initialize radii
-            radii = initialize_radii(self.Y_fit_)
-            intercept_in, intercept_out = directed_intercept_mle(
-                                                self.Y_fit_,
-                                                X, radii,
-                                                squared=False)
-            intercept = np.array([intercept_in, intercept_out])
-        else:
-            scale, intercept = scale_intercept_mle(self.Y_fit_, X,
-                                                   squared=False)
-            intercept = np.array([intercept])
+        if self.is_weighted:
+            if self.is_directed:
+                # initialize radii
+                radii = initialize_radii(self.Y_fit_)
+                # initialize nu_sq (for initialization error term is assumed to be standard gaussian distributed -> nu_sq=1)
+                nu = 1
+                # initialize intercept
+                intercept_in, intercept_out = directed_intercept_mle(
+                                                    self.Y_fit_,
+                                                    X, radii, nu,
+                                                    is_weighted=self.is_weighted,
+                                                    squared=False)
+                intercept = np.array([intercept_in, intercept_out])
+            else:
+                # initialize nu_sq
+                nu = 1
+                scale, intercept = scale_intercept_mle(self.Y_fit_, X,
+                                                       nu, is_weighted=self.is_weighted,
+                                                       squared=False)
+                intercept = np.array([intercept])
 
-            # rescale initial latent positions
-            X *= np.exp(scale)
+                # rescale initial latent positions
+                X *= np.exp(scale)
+        else:
+            if self.is_directed:
+                # initialize radii
+                radii = initialize_radii(self.Y_fit_)
+                # initialize intercept
+                intercept_in, intercept_out = directed_intercept_mle(self.Y_fit_,
+                                                                     X, radii,
+                                                                     squared=False)
+                intercept = np.array([intercept_in, intercept_out])
+            else:
+                scale, intercept = scale_intercept_mle(self.Y_fit_, X,
+                                                       squared=False)
+                intercept = np.array([intercept])
+
+                # rescale initial latent positions
+                X *= np.exp(scale)
 
         # center latent space across time
         X -= np.mean(X, axis=(0, 1))
@@ -488,26 +514,39 @@ class DynamicNetworkLSM(object):
         if self.is_directed:
             self.radiis_[0] = radii
 
+        if self.is_weighted:
+            self.nus_[0] = nu
+
         # initialize case-control likelihood sampler
         self.case_control_sampler_ = None
         if self.n_control is not None:
             if not self.is_directed:
                 raise ValueError('The case-control likelihood currently only '
                                  'supported for directed networks.')
-
-            self.case_control_sampler_ = DirectedCaseControlSampler(
-                                            n_control=self.n_control,
-                                            n_resample=self.n_resample_control,
-                                            random_state=rng)
-            self.case_control_sampler_.init(self.Y_fit_)
+            elif self.is_weighted:
+                # TODO: Loglikelihood for case_control_sampler in weighted case
+                raise ValueError('The case-control likelihood currently only '
+                                 'supported for non-weighted directed networks.')
+            else:
+                self.case_control_sampler_ = DirectedCaseControlSampler(
+                                                n_control=self.n_control,
+                                                n_resample=self.n_resample_control,
+                                                random_state=rng)
+                self.case_control_sampler_.init(self.Y_fit_)
 
         # init log-posteriors
         self.logps_ = np.zeros(self.n_iter, dtype=np.float64)
 
-        if self.is_directed:
-            self.logps_[0] = self.logp(self.Y_fit_, X, intercept, radii=radii)
+        if self.is_weighted:
+            if self.is_directed:
+                self.logps_[0] = self.logp(self.Y_fit_, X, intercept, radii=radii, nu=nu)
+            else:
+                self.logps_[0] = self.logp(self.Y_fit_, X, intercept, nu=nu)
         else:
-            self.logps_[0] = self.logp(self.Y_fit_, X, intercept)
+            if self.is_directed:
+                self.logps_[0] = self.logp(self.Y_fit_, X, intercept, radii=radii)
+            else:
+                self.logps_[0] = self.logp(self.Y_fit_, X, intercept)
 
         # set current MAP estimates
         self.logp_ = self.logps_[0]
@@ -515,6 +554,8 @@ class DynamicNetworkLSM(object):
         self.intercept_ = intercept
         if self.is_directed:
             self.radii_ = radii
+        if self.is_weighted:
+            self.nu_ = nu
 
         # initialize metropolis samplers
         self.latent_samplers = []
@@ -539,11 +580,15 @@ class DynamicNetworkLSM(object):
             self.radii_sampler = Metropolis(step_size=self.step_size_radii,
                                             tune=None,
                                             proposal_type='dirichlet')
+        if self.is_weighted:
+            self.nu_sampler = Metropolis(step_size=self.step_size_nu, tune=self.tune,
+                                         proposal_type='random_walk')
 
         for it in tqdm(range(1, self.n_iter)):
             X = self.Xs_[it - 1].copy()
             intercept = self.intercepts_[it - 1].copy()
             radii = self.radiis_[it - 1].copy() if self.is_directed else None
+            nu = self.nus_[it - 1].copy() if self.is_weighted else None
 
             # re-sample control group if necessary
             if self.case_control_sampler_ is not None:
@@ -552,9 +597,11 @@ class DynamicNetworkLSM(object):
             X = sample_latent_positions(
                     self.Y_fit_, X, intercept=intercept,
                     radii=radii,
+                    nu=nu,
                     tau_sq=self.tau_sq,
                     sigma_sq=self.sigma_sq,
                     samplers=self.latent_samplers,
+                    is_weighted=self.is_weighted,
                     is_directed=self.is_directed,
                     squared=False,
                     case_control_sampler=self.case_control_sampler_,
@@ -578,8 +625,9 @@ class DynamicNetworkLSM(object):
                         self.Y_fit_, X, intercept,
                         intercept_prior=self.intercept_prior,
                         intercept_variance_prior=self.intercept_variance_prior,
-                        samplers=self.intercept_samplers, radii=radii,
-                        dist=dist, is_directed=self.is_directed,
+                        samplers=self.intercept_samplers, radii=radii, nu=nu,
+                        dist=dist, is_weighted=self.is_weighted,
+                        is_directed=self.is_directed,
                         case_control_sampler=self.case_control_sampler_,
                         squared=False, random_state=rng)
 
@@ -587,15 +635,28 @@ class DynamicNetworkLSM(object):
             if self.is_directed:
                 radii = sample_radii(
                             self.Y_fit_, X, intercepts=intercept, radii=radii,
-                            sampler=self.radii_sampler, dist=dist,
+                            sampler=self.radii_sampler, nu=nu, dist=dist,
+                            is_weighted=self.is_weighted,
                             case_control_sampler=self.case_control_sampler_,
                             squared=False, random_state=rng)
+            # sample nu_sq for weighted networks
+            if self.is_weighted:
+                nu = sample_nu(self.Y_fit_, X,
+                               delta=self.delta, zeta_sq=self.zeta_sq,
+                               intercepts=intercept, radii=radii, nu=nu,
+                               sampler=self.nu_sampler, dist=dist,
+                               is_directed=self.is_directed,
+                               case_control_sampler=self.case_control_sampler_,
+                               squared=False, random_state=rng)
 
             # sample missing edges
             if sample_missing:
                 # calculate pij for missing edges and sample from Bern(pij)
                 # This is sampling everything! just sample missing...
-                if self.is_directed:
+                # TODO: directed_network_probas for weighted network
+                if self.is_weighted:
+                    raise ValueError('Sampling missing edges is not supported for weighted networks, yet.')
+                elif self.is_directed:
                     probas = directed_network_probas(dist, radii,
                                                      intercept[0],
                                                      intercept[1])
@@ -614,11 +675,18 @@ class DynamicNetworkLSM(object):
                     self.Y_fit_ = Y_new + np.transpose(Y_new, axes=(0, 2, 1))
 
             # check if current MAP
-            if self.is_directed:
-                self.logps_[it] = self.logp(self.Y_fit_, X, intercept,
-                                            radii=radii, dist=dist)
+            if self.is_weighted:
+                if self.is_directed:
+                    self.logps_[it] = self.logp(self.Y_fit_, X, intercept,
+                                                radii=radii, nu=nu, dist=dist)
+                else:
+                    self.logps_[it] = self.logp(self.Y_fit_, X, intercept, nu=nu, dist)
             else:
-                self.logps_[it] = self.logp(self.Y_fit_, X, intercept, dist)
+                if self.is_directed:
+                    self.logps_[it] = self.logp(self.Y_fit_, X, intercept,
+                                                radii=radii, dist=dist)
+                else:
+                    self.logps_[it] = self.logp(self.Y_fit_, X, intercept, dist)
 
             if self.tune and (it == (self.tune + self.burn)):
                 self.logp_ = self.logps_[it]
@@ -626,6 +694,8 @@ class DynamicNetworkLSM(object):
                 self.intercept_ = intercept
                 if self.is_directed:
                     self.radii_ = radii
+                if self.is_weighted:
+                    self.nu_ = nu
 
             elif self.logps_[it] > self.logp_:
                 self.logp_ = self.logps_[it]
@@ -633,44 +703,69 @@ class DynamicNetworkLSM(object):
                 self.intercept_ = intercept
                 if self.is_directed:
                     self.radii_ = radii
+                if self.is_weighted:
+                    self.nu_ = nu
 
             # save samples
             self.Xs_[it] = X
             self.intercepts_[it] = intercept
             if self.is_directed:
                 self.radiis_[it] = radii
+            if self. is_weighted:
+                self.nus_[it] = nu
 
         return self
 
-    def logp(self, Y, X, intercept, radii=None, dist=None):
+    def logp(self, Y, X, intercept, radii=None, nu=None, dist=None):
         n_time_steps, n_nodes, _ = Y.shape
 
         # network log-likelihood
-        if self.is_directed:
-            if self.case_control_sampler_ is not None:
-                loglik = approx_directed_network_loglikelihood(
-                    X,
-                    radii=radii,
-                    in_edges=self.case_control_sampler_.in_edges_,
-                    out_edges=self.case_control_sampler_.out_edges_,
-                    degree=self.case_control_sampler_.degrees_,
-                    control_nodes=self.case_control_sampler_.control_nodes_out_,
-                    intercept_in=intercept[0],
-                    intercept_out=intercept[1],
-                    squared=False)
+        if self.is_weighted:
+            if self.is_directed:
+                if self.case_control_sampler_ is not None:
+                    # TODO: Loglikelihood for case_control_sampler in weighted case
+                    raise ValueError('The case-control likelihood currently only '
+                                     'supported for non-weighted directed networks.')
+                else:
+                    loglik = dynamic_network_loglikelihood_directed_weighted(
+                        Y, X,
+                        intercept_in=intercept[0],
+                        intercept_out=intercept[1],
+                        radii=radii,
+                        nu=nu,
+                        squared=False,
+                        dist=dist)
             else:
-                loglik = dynamic_network_loglikelihood_directed(
-                    Y, X,
-                    intercept_in=intercept[0],
-                    intercept_out=intercept[1],
-                    radii=radii,
+                loglik = dynamic_network_loglikelihood_undirected_weighted(
+                    Y, X, intercept, nu,
                     squared=False,
                     dist=dist)
         else:
-            loglik = dynamic_network_loglikelihood_undirected(
-                Y, X, intercept,
-                squared=False,
-                dist=dist)
+            if self.is_directed:
+                if self.case_control_sampler_ is not None:
+                    loglik = approx_directed_network_loglikelihood(
+                        X,
+                        radii=radii,
+                        in_edges=self.case_control_sampler_.in_edges_,
+                        out_edges=self.case_control_sampler_.out_edges_,
+                        degree=self.case_control_sampler_.degrees_,
+                        control_nodes=self.case_control_sampler_.control_nodes_out_,
+                        intercept_in=intercept[0],
+                        intercept_out=intercept[1],
+                        squared=False)
+                else:
+                    loglik = dynamic_network_loglikelihood_directed(
+                        Y, X,
+                        intercept_in=intercept[0],
+                        intercept_out=intercept[1],
+                        radii=radii,
+                        squared=False,
+                        dist=dist)
+            else:
+                loglik = dynamic_network_loglikelihood_undirected(
+                    Y, X, intercept,
+                    squared=False,
+                    dist=dist)
 
         # latent space priors
         for t in range(n_time_steps):
