@@ -197,7 +197,7 @@ def sample_radii(Y, X, intercepts, radii, sampler, nu=None, dist=None,
 
     return sampler.step(radii, logp, rng)
 
-def sample_nu(Y, X, delta, zeta_sq, intercepts, radii=None, nu, sampler, dist=None,
+def sample_nu(Y, X, delta, zeta_sq, intercepts, nu, sampler, radii=None, dist=None,
                  is_directed=False, case_control_sampler=None, squared=False, random_state=None):
     rng = check_random_state(random_state)
 
