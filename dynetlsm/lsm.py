@@ -115,8 +115,8 @@ def directed_intercept_mle(Y, X, radii, nu=None, is_weighted=False, intercept_in
             return -dynamic_network_loglikelihood_directed_weighted(Y, X,
                                                                     intercept_in,
                                                                     intercept_out,
-                                                                    radii,
-                                                                    nu,
+                                                                    radii=radii,
+                                                                    nu=nu,
                                                                     squared=squared,
                                                                     dist=dist)
 
@@ -303,12 +303,12 @@ class DynamicNetworkLSM(object):
                  intercept_variance_prior=2.0,
                  tau_sq=2.0,
                  sigma_sq=0.1,
-                 delta = 0.05,
-                 zeta_sq = 1,
+                 delta=0.05,
+                 zeta_sq=1,
                  step_size_X=0.1,
                  step_size_intercept=0.1,
                  step_size_radii=175000,
-                 step_size_nu=0.1,
+                 step_size_nu=0.01,
                  n_control=None,
                  n_resample_control=100,
                  copy=True,
@@ -465,17 +465,16 @@ class DynamicNetworkLSM(object):
                 # initialize nu_sq (for initialization error term is assumed to be standard gaussian distributed -> nu_sq=1)
                 nu = 1
                 # initialize intercept
-                intercept_in, intercept_out = directed_intercept_mle(
-                                                    self.Y_fit_,
-                                                    X, radii, nu,
-                                                    is_weighted=self.is_weighted,
-                                                    squared=False)
+                intercept_in, intercept_out = directed_intercept_mle(self.Y_fit_, X,
+                                                                     radii=radii, nu=nu,
+                                                                     is_weighted=self.is_weighted,
+                                                                     squared=False)
                 intercept = np.array([intercept_in, intercept_out])
             else:
                 # initialize nu_sq
                 nu = 1
                 scale, intercept = scale_intercept_mle(self.Y_fit_, X,
-                                                       nu, is_weighted=self.is_weighted,
+                                                       nu=nu, is_weighted=self.is_weighted,
                                                        squared=False)
                 intercept = np.array([intercept])
 
@@ -581,7 +580,7 @@ class DynamicNetworkLSM(object):
                                             tune=None,
                                             proposal_type='dirichlet')
         if self.is_weighted:
-            self.nu_sampler = Metropolis(step_size=self.step_size_nu, tune=self.tune,
+            self.nu_sampler = Metropolis(step_size=self.step_size_nu, tune=None,
                                          proposal_type='random_walk')
 
         for it in tqdm(range(1, self.n_iter)):
@@ -680,7 +679,7 @@ class DynamicNetworkLSM(object):
                     self.logps_[it] = self.logp(self.Y_fit_, X, intercept,
                                                 radii=radii, nu=nu, dist=dist)
                 else:
-                    self.logps_[it] = self.logp(self.Y_fit_, X, intercept, nu=nu, dist)
+                    self.logps_[it] = self.logp(self.Y_fit_, X, intercept, nu=nu, dist=dist)
             else:
                 if self.is_directed:
                     self.logps_[it] = self.logp(self.Y_fit_, X, intercept,
@@ -711,7 +710,7 @@ class DynamicNetworkLSM(object):
             self.intercepts_[it] = intercept
             if self.is_directed:
                 self.radiis_[it] = radii
-            if self. is_weighted:
+            if self.is_weighted:
                 self.nus_[it] = nu
 
         return self
