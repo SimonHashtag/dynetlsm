@@ -304,11 +304,11 @@ class DynamicNetworkLSM(object):
                  tau_sq=2.0,
                  sigma_sq=0.1,
                  delta=0.05,
-                 zeta_sq=1,
+                 zeta_sq=2.5,
                  step_size_X=0.1,
                  step_size_intercept=0.1,
                  step_size_radii=175000,
-                 step_size_nu=0.01,
+                 step_size_nu=0.05,
                  n_control=None,
                  n_resample_control=100,
                  copy=True,
@@ -580,8 +580,8 @@ class DynamicNetworkLSM(object):
                                             tune=None,
                                             proposal_type='dirichlet')
         if self.is_weighted:
-            self.nu_sampler = Metropolis(step_size=self.step_size_nu, tune=None,
-                                         proposal_type='random_walk')
+            self.nu_sampler = Metropolis(step_size=self.step_size_nu, tune=self.tune,
+                                         proposal_type='random_walk_constrained')
 
         for it in tqdm(range(1, self.n_iter)):
             X = self.Xs_[it - 1].copy()
