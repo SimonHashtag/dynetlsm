@@ -85,9 +85,15 @@ def random_walk_metropolis_constrained(x0, logp, step_size, random_state):
     n_features = x0.shape[0]
 
     # random walk proposal
-    x=0
-    while x <= 0:
-        x = x0 + step_size * random_state.randn(n_features)
+    # x=0
+    # while x <= 0:
+    #     x = x0 + step_size * random_state.randn(n_features)
+
+    x = (1 - step_size) * stats.truncnorm.rvs(a=0-x0,
+                                              b=np.Inf,
+                                              loc=x0, scale=1,
+                                              size=n_features,
+                                              random_state=random_state)
 
     # accept-reject
     accept_ratio = logp(x) - logp(x0) + stats.norm.logcdf(x0) - stats.norm.logcdf(x)
