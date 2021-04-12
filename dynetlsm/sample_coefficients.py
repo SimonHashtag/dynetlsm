@@ -215,10 +215,11 @@ def sample_nu(Y, X, delta, zeta_sq, intercepts, nu, sampler, radii=None, dist=No
                     intercept_in=intercepts[0],
                     intercept_out=intercepts[1],
                     radii=radii,
-                    nu = x,
+                    nu=x,
                     squared=squared,
                     dist=dist)
-            loglik -= ((2 + delta) + 1)* np.log(1 / x) + ((1 + delta) * zeta_sq) / x
+
+            loglik -= ((2 + delta) + 1) * np.log(x) + ((1 + delta) * zeta_sq) / x
             return loglik
     else:
         def logp(x):
@@ -230,7 +231,7 @@ def sample_nu(Y, X, delta, zeta_sq, intercepts, nu, sampler, radii=None, dist=No
                 nu=x,
                 squared=squared,
                 dist=dist)
-            loglik -= ((2 + delta) + 1)* np.log(1 / x) + ((1 + delta) * zeta_sq) / x
+            loglik -= ((2 + delta) + 1) * np.log(x) + ((1 + delta) * zeta_sq) / x
             return loglik
 
     return sampler.step(nu, logp, rng)
