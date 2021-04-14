@@ -103,6 +103,7 @@ def importData(filename:str, weighted:bool = False, minimal: bool = True, dropco
         deals = data.loc[(data['Delivery year'] >= year) & (data['Delivery year'] <= periodEnd)]
         if weighted == True:
             deals = deals.groupby(['Seller', 'Buyer'])['TIV delivery values'].sum().reset_index()
+            deals['TIV delivery values'] = np.log(deals['TIV delivery values'])
             G = nx.from_pandas_edgelist(deals, 'Seller', 'Buyer', edge_attr='TIV delivery values',
                                         create_using=nx.DiGraph())
             adjMatrix = nx.to_numpy_array(G, weight='TIV delivery values', nodelist = nodelist)
