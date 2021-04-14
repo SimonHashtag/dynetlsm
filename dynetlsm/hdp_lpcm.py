@@ -27,11 +27,13 @@ from .network_likelihoods import (
     approx_directed_network_loglikelihood,
     dynamic_network_loglikelihood_directed,
     dynamic_network_loglikelihood_undirected,
+    dynamic_network_loglikelihood_directed_weighted,
+    dynamic_network_loglikelihood_undirected_weighted,
     directed_network_probas
 )
 from .procrustes import longitudinal_procrustes_rotation
 from .sample_auxillary import sample_tables, sample_mbar
-from .sample_coefficients import sample_intercepts, sample_radii
+from .sample_coefficients import sample_intercepts, sample_radii, sample_nu
 from .sample_concentration import sample_concentration_param
 from .sample_labels import sample_labels_block, sample_labels_gibbs
 from .sample_latent_positions import sample_latent_positions_mixture
@@ -44,7 +46,7 @@ SMALL_EPS = np.finfo('float64').tiny
 __all__ = ['DynamicNetworkHDPLPCM']
 
 
-def init_sampler(Y, is_directed=False,
+def init_sampler(Y, is_directed=False, is_weighted=False,
                  n_iter=100, n_features=2, n_components=10,
                  gamma=1.0, alpha=1.0, kappa=4.0,
                  lambda_init=0.9, sample_missing=False,
@@ -61,8 +63,12 @@ def init_sampler(Y, is_directed=False,
             tune=250, burn=250,
             sigma_sq=0.001,
             tau_sq='auto',
+            delta=0.05,
+            zeta_sq=2.5,
             step_size_X=0.0075,
+            step_size_nu=0.05,
             is_directed=is_directed,
+            is_weighted=is_weighted,
             n_control=n_control,
             n_resample_control=n_resample_control,
             random_state=random_state).fit(Y)
@@ -73,12 +79,17 @@ def init_sampler(Y, is_directed=False,
             tune=250, burn=250,
             sigma_sq=0.1,
             tau_sq=2.0,
+            delta=0.05,
+            zeta_sq=2.5,
             step_size_X=0.1,
+            step_size_nu=0.05,
             is_directed=is_directed,
+            is_weighted=is_weighted,
             random_state=random_state).fit(Y)
 
     # imputed Y
     if sample_missing:
+        # TODO: sample_missing for weighted network
         nan_mask = np.isnan(Y)
         Y[nan_mask] = dynamic_emb.probas_[nan_mask] > 0.5
 
@@ -101,6 +112,12 @@ def init_sampler(Y, is_directed=False,
     else:
         radiis = None
 
+    if is_weighted:
+        nus = np.zeros((n_iter, 1), dtype=np.float64)
+        nus[0] = dynamic_emb.nu_
+    else:
+        nus = None
+
     # cluster parameters
     zs = np.zeros((n_iter, n_time_steps, n_nodes), dtype=np.int)
     mus = np.zeros((n_iter, n_components, n_features),
@@ -112,7 +129,7 @@ def init_sampler(Y, is_directed=False,
                                                    n_clusters=n_components,
                                                    random_state=random_state)
 
-    # intialize initial distribution to empirical distrbution due to k-means
+    # initialize initial distribution to empirical distribution due to k-means
     weights = np.zeros((n_iter, n_time_steps, n_components, n_components),
                        dtype=np.float64)
     resp = np.zeros((n_nodes, n_components))
@@ -136,7 +153,7 @@ def init_sampler(Y, is_directed=False,
             wtk = rng.dirichlet(dir_alpha + kappa * np.eye(n_components)[k])
             weights[0, t, k] = wtk
 
-    return Xs, intercepts, mus, sigmas, zs, betas, weights, lambdas, radiis, Y
+    return Xs, intercepts, mus, sigmas, zs, betas, weights, lambdas, radiis, nus, Y
 
 
 class DynamicNetworkHDPLPCM(object):
@@ -383,6 +400,7 @@ class DynamicNetworkHDPLPCM(object):
     def __init__(self,
                  n_features=2,
                  n_components=10,
+                 is_weighted=False,
                  is_directed=False,
                  selection_type='vi',
                  n_iter=5000,
@@ -397,6 +415,8 @@ class DynamicNetworkHDPLPCM(object):
                  intercept_prior='auto',
                  intercept_variance_prior=2,
                  mean_variance_prior='auto',
+                 delta=0.05,
+                 zeta_sq=2.5,
                  a=2.0,
                  b='auto',
                  lambda_prior=0.9,
@@ -406,11 +426,13 @@ class DynamicNetworkHDPLPCM(object):
                  step_size_X='auto',
                  step_size_intercept=0.1,
                  step_size_radii=175000,
+                 step_size_nu=0.05,
                  n_control=None,
                  n_resample_control=100,
                  copy=True,
                  random_state=None):
         self.n_iter = n_iter
+        self.is_weighted = is_weighted
         self.is_directed = is_directed
         self.n_features = n_features
         self.n_components = n_components
@@ -419,6 +441,8 @@ class DynamicNetworkHDPLPCM(object):
         self.intercept_variance_prior = intercept_variance_prior
         self.step_size_intercept = step_size_intercept
         self.mean_variance_prior = mean_variance_prior
+        self.delta = delta
+        self.zeta_sq = zeta_sq
         self.a = a
         self.b = b
         self.alpha_init = alpha_init
@@ -430,6 +454,7 @@ class DynamicNetworkHDPLPCM(object):
         self.mean_variance_prior_std = mean_variance_prior_std
         self.sigma_prior_std = sigma_prior_std
         self.step_size_radii = step_size_radii
+        self.step_size_nu = step_size_nu
         self.tune = tune
         self.tune_interval = tune_interval
         self.burn = burn
@@ -464,6 +489,7 @@ class DynamicNetworkHDPLPCM(object):
         """Estimated connection probability matrix,
         shape (n_time_steps, n_nodes, n_nodes).
         """
+        # TODO: probas for weighted case -> not connection prob. matrix
         if not hasattr(self, 'X_'):
             raise ValueError('Model not fit.')
 
@@ -537,18 +563,19 @@ class DynamicNetworkHDPLPCM(object):
 
         (self.Xs_, self.intercepts_, self.mus_, self.sigmas_, self.zs_,
          self.betas_, self.weights_, self.lambdas_,
-         self.radiis_, self.Y_fit_) = init_sampler(
-                         Y, is_directed=self.is_directed,
-                         n_iter=self.n_iter,
-                         n_features=self.n_features,
-                         n_components=self.n_components,
-                         lambda_init=self.lambda_prior,
-                         gamma=self.gamma,
-                         alpha=self.alpha,
-                         sample_missing=sample_missing,
-                         n_control=self.n_control,
-                         n_resample_control=self.n_resample_control,
-                         random_state=rng)
+         self.radiis_, self.nus_, self.Y_fit_) = init_sampler(Y,
+                                                              is_directed=self.is_directed,
+                                                              is_weighted=self.is_weighted,
+                                                              n_iter=self.n_iter,
+                                                              n_features=self.n_features,
+                                                              n_components=self.n_components,
+                                                              lambda_init=self.lambda_prior,
+                                                              gamma=self.gamma,
+                                                              alpha=self.alpha,
+                                                              sample_missing=sample_missing,
+                                                              n_control=self.n_control,
+                                                              n_resample_control=self.n_resample_control,
+                                                              random_state=rng)
 
         if self.step_size_X == 'auto':
             self.step_size_X = 0.01 if self.is_directed else 0.1
@@ -559,12 +586,16 @@ class DynamicNetworkHDPLPCM(object):
             if not self.is_directed:
                 raise ValueError('The case-control likelihood currently only '
                                  'supported for directed networks.')
-
-            self.case_control_sampler_ = DirectedCaseControlSampler(
-                                            n_control=self.n_control,
-                                            n_resample=self.n_resample_control,
-                                            random_state=rng)
-            self.case_control_sampler_.init(self.Y_fit_)
+            elif self.is_weighted:
+                # TODO: Loglikelihood for case_control_sampler in weighted case
+                raise ValueError('The case-control likelihood currently only '
+                                 'supported for non-weighted directed networks.')
+            else:
+                self.case_control_sampler_ = DirectedCaseControlSampler(
+                                                n_control=self.n_control,
+                                                n_resample=self.n_resample_control,
+                                                random_state=rng)
+                self.case_control_sampler_.init(self.Y_fit_)
 
         # init metropolis samplers
         self.latent_samplers = []
@@ -590,6 +621,11 @@ class DynamicNetworkHDPLPCM(object):
             self.radii_sampler = Metropolis(step_size=self.step_size_radii,
                                             tune=self.tune,
                                             proposal_type='dirichlet')
+
+        if self.is_weighted:
+            self.nu_sampler = Metropolis(step_size=self.step_size_nu,
+                                         tune=self.tune,
+                                         proposal_type='random_walk_constrained')
 
         # initialize hyper-parameters
         if self.intercept_prior == 'auto':
@@ -639,18 +675,34 @@ class DynamicNetworkHDPLPCM(object):
 
         # record log-probability of each sample
         self.logps_ = np.zeros(self.n_iter, dtype=np.float64)
-        if self.is_directed:
-            self.logps_[0] = self.logp(
-                self.Xs_[0], self.intercepts_[0],
-                self.mus_[0], self.sigmas_[0], self.zs_[0],
-                self.weights_[0], self.betas_[0],
-                self.lambdas_[0], radii=self.radiis_[0])
+
+        if self.is_weighted:
+            if self.is_directed:
+                self.logps_[0] = self.logp(
+                    self.Xs_[0], self.intercepts_[0],
+                    self.mus_[0], self.sigmas_[0], self.zs_[0],
+                    self.weights_[0], self.betas_[0],
+                    self.lambdas_[0], radii=self.radiis_[0],
+                    nu=self.nus_[0])
+            else:
+                self.logps_[0] = self.logp(
+                    self.Xs_[0], self.intercepts_[0],
+                    self.mus_[0], self.sigmas_[0], self.zs_[0],
+                    self.weights_[0], self.betas_[0],
+                    self.lambdas_[0], nu=self.nus_[0])
         else:
-            self.logps_[0] = self.logp(
-                self.Xs_[0], self.intercepts_[0],
-                self.mus_[0], self.sigmas_[0], self.zs_[0],
-                self.weights_[0], self.betas_[0],
-                self.lambdas_[0])
+            if self.is_directed:
+                self.logps_[0] = self.logp(
+                    self.Xs_[0], self.intercepts_[0],
+                    self.mus_[0], self.sigmas_[0], self.zs_[0],
+                    self.weights_[0], self.betas_[0],
+                    self.lambdas_[0], radii=self.radiis_[0])
+            else:
+                self.logps_[0] = self.logp(
+                    self.Xs_[0], self.intercepts_[0],
+                    self.mus_[0], self.sigmas_[0], self.zs_[0],
+                    self.weights_[0], self.betas_[0],
+                    self.lambdas_[0])
         self.logp_ = self.logps_[0]
 
         return self._fit(Y, rng)
@@ -678,6 +730,7 @@ class DynamicNetworkHDPLPCM(object):
             beta = self.betas_[it - 1].copy()
             lmbda = self.lambdas_[it - 1].copy()
             radii = self.radiis_[it - 1].copy() if self.is_directed else None
+            nu = self.nus_[it - 1].copy() if self.is_weighted else None
 
             # re-sample control group if necessary
             if self.case_control_sampler_ is not None:
@@ -688,8 +741,9 @@ class DynamicNetworkHDPLPCM(object):
                     self.Y_fit_, X,
                     intercept=intercept,
                     mu=mu, sigma=sigma, lmbda=lmbda,
-                    z=z, radii=radii,
+                    z=z, radii=radii, nu=nu,
                     samplers=self.latent_samplers,
+                    is_weighted=self.is_weighted,
                     is_directed=self.is_directed,
                     squared=False,
                     case_control_sampler=self.case_control_sampler_,
@@ -707,8 +761,9 @@ class DynamicNetworkHDPLPCM(object):
                 self.Y_fit_, X, intercept,
                 intercept_prior=self.intercept_prior,
                 intercept_variance_prior=self.intercept_variance_prior,
-                samplers=self.intercept_samplers, radii=radii,
-                dist=dist, is_directed=self.is_directed,
+                samplers=self.intercept_samplers, radii=radii, nu=nu,
+                dist=dist, is_weighted=self.is_weighted,
+                is_directed=self.is_directed,
                 case_control_sampler=self.case_control_sampler_,
                 squared=False, random_state=rng)
 
@@ -716,9 +771,20 @@ class DynamicNetworkHDPLPCM(object):
             if self.is_directed:
                 radii = sample_radii(
                             self.Y_fit_, X, intercepts=intercept, radii=radii,
-                            sampler=self.radii_sampler, dist=dist,
+                            sampler=self.radii_sampler, nu=nu, dist=dist,
+                            is_weighted=self.is_weighted,
                             case_control_sampler=self.case_control_sampler_,
                             squared=False, random_state=rng)
+
+            # sample nu_sq for weighted networks
+            if self.is_weighted:
+                nu = sample_nu(self.Y_fit_, X,
+                               delta=self.delta, zeta_sq=self.zeta_sq,
+                               intercepts=intercept, radii=radii, nu=nu,
+                               sampler=self.nu_sampler, dist=dist,
+                               is_directed=self.is_directed,
+                               case_control_sampler=self.case_control_sampler_,
+                               squared=False, random_state=rng)
 
             # block sample labels
             z, n, nk, resp = sample_labels_block(X, mu, sigma, lmbda, weights,
@@ -874,6 +940,9 @@ class DynamicNetworkHDPLPCM(object):
             if sample_missing:
                 # calculate pij for missing edges and sample from Bern(pij)
                 # This is sampling everything! just sample missing...
+                # TODO: directed_network_probas for weighted network
+                if self.is_weighted:
+                    raise ValueError('Sampling missing edges is not supported for weighted networks, yet.')
                 if self.is_directed:
                     probas = directed_network_probas(dist, radii,
                                                      intercept[0],
@@ -903,14 +972,24 @@ class DynamicNetworkHDPLPCM(object):
             self.lambdas_[it] = lmbda
             if self.is_directed:
                 self.radiis_[it] = radii
+            if self.is_weighted:
+                self.nus_[it] = nu
 
             # set current MAP
-            if self.is_directed:
-                self.logps_[it] = self.logp(X, intercept, mu, sigma, z, weights,
-                                            beta, lmbda, radii=radii, dist=dist)
+            if self.is_weighted:
+                if self.is_directed:
+                    self.logps_[it] = self.logp(X, intercept, mu, sigma, z, weights,
+                                                beta, lmbda, radii=radii, nu=nu, dist=dist)
+                else:
+                    self.logps_[it] = self.logp(X, intercept, mu, sigma, z, weights,
+                                                beta, lmbda, nu=nu, dist=dist)
             else:
-                self.logps_[it] = self.logp(X, intercept, mu, sigma, z, weights,
-                                            beta, lmbda, dist=dist)
+                if self.is_directed:
+                    self.logps_[it] = self.logp(X, intercept, mu, sigma, z, weights,
+                                                beta, lmbda, radii=radii, dist=dist)
+                else:
+                    self.logps_[it] = self.logp(X, intercept, mu, sigma, z, weights,
+                                                beta, lmbda, dist=dist)
 
         # apply thinning if necessary
         if self.thin is not None:
@@ -925,6 +1004,8 @@ class DynamicNetworkHDPLPCM(object):
             self.logps_ = self.logps_[::self.thin]
             if self.is_directed:
                 self.radiis_ = self.radiis_[::self.thin]
+            if self.is_weighted:
+                self.nus_ = self.nus_[::self.thin]
 
         # perform model selection
         n_burn = self.n_burn_
@@ -944,6 +1025,8 @@ class DynamicNetworkHDPLPCM(object):
             self.lambda_ = self.lambdas_[best_id]
             if self.is_directed:
                 self.radii_ = self.radiis_[best_id]
+            if self.is_weighted:
+                self.nu_ = self.nus_[best_id]
 
             z, beta, init_w, trans_w, mu, sigma = renormalize_weights(
                 self, sample_id=best_id)
@@ -971,6 +1054,8 @@ class DynamicNetworkHDPLPCM(object):
             self.sigma_ = self.models_[model_id].sigma
             if self.is_directed:
                 self.radii_ = self.models_[model_id].radii
+            if self.is_weighted:
+                self.nu_ = self.models_[model_id].nu
 
             # return_inverse relabels to start at zero
             _, temp_z = np.unique(self.models_[model_id].z.ravel(),
@@ -994,6 +1079,8 @@ class DynamicNetworkHDPLPCM(object):
         self.intercepts_mean_ = self.intercepts_[n_burn:].mean(axis=0)
         if self.is_directed:
             self.radii_mean_ = self.radiis_[n_burn:].mean(axis=0)
+        if self.is_directed:
+            self.nu_mean_ = self.nus_[n_burn:].mean(axis=0)
 
         # store posterior group count probabilities
         self.posterior_group_ids_, self.posterior_group_counts_ = [], []
@@ -1025,7 +1112,7 @@ class DynamicNetworkHDPLPCM(object):
             self.cooccurrence_probas_[t] = calculate_posterior_cooccurrence(
                 self, t=t)
 
-    def logp(self, X, intercept, mu, sigma, z, weights, beta, lmbda, radii=None,
+    def logp(self, X, intercept, mu, sigma, z, weights, beta, lmbda, radii=None, nu=None,
              dist=None):
         n_time_steps, n_nodes, _ = X.shape
 
@@ -1051,28 +1138,48 @@ class DynamicNetworkHDPLPCM(object):
                 loglik += np.log(weights[t, z[t-1, i], z[t, i]])
 
         # network log-likelihood
-        if self.is_directed:
-            if self.case_control_sampler_ is not None:
-                loglik += approx_directed_network_loglikelihood(
-                    X,
-                    radii=radii,
-                    in_edges=self.case_control_sampler_.in_edges_,
-                    out_edges=self.case_control_sampler_.out_edges_,
-                    degree=self.case_control_sampler_.degrees_,
-                    control_nodes=self.case_control_sampler_.control_nodes_out_,
-                    intercept_in=intercept[0],
-                    intercept_out=intercept[1],
-                    squared=False)
+        if self.is_weighted:
+            if self.is_directed:
+                if self.case_control_sampler_ is not None:
+                    # TODO: Loglikelihood for case_control_sampler in weighted case
+                    raise ValueError('The case-control likelihood currently only '
+                                     'supported for non-weighted directed networks.')
+                else:
+                    loglik += dynamic_network_loglikelihood_directed_weighted(self.Y_fit_, X,
+                                                                              intercept_in=intercept[0],
+                                                                              intercept_out=intercept[1],
+                                                                              radii=radii,
+                                                                              nu=nu,
+                                                                              squared=False,
+                                                                              dist=dist)
             else:
-                loglik += dynamic_network_loglikelihood_directed(
-                                self.Y_fit_, X,
-                                intercept_in=intercept[0],
-                                intercept_out=intercept[1],
-                                radii=radii, dist=dist)
+                loglik += dynamic_network_loglikelihood_undirected_weighted(self.Y_fit_, X,
+                                                                            intercept, nu,
+                                                                            squared=False,
+                                                                            dist=dist)
         else:
-            loglik += dynamic_network_loglikelihood_undirected(self.Y_fit_, X,
-                                                               intercept,
-                                                               dist=dist)
+            if self.is_directed:
+                if self.case_control_sampler_ is not None:
+                    loglik += approx_directed_network_loglikelihood(
+                        X,
+                        radii=radii,
+                        in_edges=self.case_control_sampler_.in_edges_,
+                        out_edges=self.case_control_sampler_.out_edges_,
+                        degree=self.case_control_sampler_.degrees_,
+                        control_nodes=self.case_control_sampler_.control_nodes_out_,
+                        intercept_in=intercept[0],
+                        intercept_out=intercept[1],
+                        squared=False)
+                else:
+                    loglik += dynamic_network_loglikelihood_directed(
+                                    self.Y_fit_, X,
+                                    intercept_in=intercept[0],
+                                    intercept_out=intercept[1],
+                                    radii=radii, dist=dist)
+            else:
+                loglik += dynamic_network_loglikelihood_undirected(self.Y_fit_, X,
+                                                                   intercept,
+                                                                   dist=dist)
 
         # intercept prior
         if self.is_directed:
@@ -1109,6 +1216,9 @@ class DynamicNetworkHDPLPCM(object):
         if self.is_directed:
             loglik += stats.dirichlet.logpdf(radii, np.ones(n_nodes))
 
+        if self.is_weighted:
+            loglik -= ((2 + self.delta) + 1) * np.log(nu) + ((1 + self.delta) * self.zeta_sq) / nu
+
         # hyperprior loglik
         if self.mean_variance_prior_std is not None:
             loglik += (-(0.5 * self.a0_ + 1) *
@@ -1140,6 +1250,8 @@ class DynamicNetworkHDPLPCM(object):
         self.sigma_ = self.models_[model_id].sigma
         if self.is_directed:
             self.radii_ = self.models_[model_id].radii
+        if self.is_weighted:
+            self.nu_ = self.models_[model_id].nu
 
         # return_inverse relabels to start at zero
         _, temp_z = np.unique(self.models_[model_id].z.ravel(),
@@ -1168,3 +1280,5 @@ class DynamicNetworkHDPLPCM(object):
 
         if self.is_directed:
             del self.radiis_
+        if self.is_weighted:
+            del self.nus_
