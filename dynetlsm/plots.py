@@ -34,7 +34,7 @@ __all__ = ['plot_network_pyvis',
            'plot_latent_space',
            'plot_probability_matrix',
            'plot_traces',
-           'plot_poserior_counts',
+           'plot_posterior_counts',
            'plot_transition_probabilities',
            'plot_adjacency_matrix',
            'alluvial_plot']
@@ -611,13 +611,22 @@ def plot_latent_space_lsm(model, t=0,
             x2 = X[t, j]
 
             if model.is_directed:
-                arrow_patch(x1, x2, sizes[i], sizes[j], ax,
-                            alpha=alpha,
-                            connectionstyle=connectionstyle,
-                            linewidth=linewidth,
-                            mutation_scale=mutation_scale,
-                            arrowstyle=arrowstyle,
-                            zorder=1)
+                if use_radii:
+                    arrow_patch(x1, x2, sizes[i], sizes[j], ax,
+                                alpha=alpha,
+                                connectionstyle=connectionstyle,
+                                linewidth=linewidth,
+                                mutation_scale=mutation_scale,
+                                arrowstyle=arrowstyle,
+                                zorder=1)
+                else:
+                    arrow_patch(x1, x2, sizes, sizes, ax,
+                                alpha=alpha,
+                                connectionstyle=connectionstyle,
+                                linewidth=linewidth,
+                                mutation_scale=mutation_scale,
+                                arrowstyle=arrowstyle,
+                                zorder=1)
             else:
                 arrow_patch(x1, x2, sizes, sizes, ax,
                             alpha=alpha,
@@ -766,11 +775,11 @@ def plot_latent_space_lpcm(model, t=0, estimate_type='best',
                             arrowstyle='-',
                             zorder=1)
 
-    ax.scatter(X[t, mask, 0], X[t, mask, 1],
+    ax.scatter(x=X[t, mask, 0], y=X[t, mask, 1],
+               s=sizes,
                c=colors[encoder.transform(z[t, mask])],
                alpha=alpha,
                edgecolor='white',
-               s=sizes,
                zorder=2)
 
     # label nodes
