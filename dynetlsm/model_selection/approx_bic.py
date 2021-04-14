@@ -3,6 +3,8 @@ import numpy as np
 from ..network_likelihoods import compute_gaussian_likelihood
 from ..network_likelihoods import dynamic_network_loglikelihood_undirected
 from ..network_likelihoods import dynamic_network_loglikelihood_directed
+from ..network_likelihoods import dynamic_network_loglikelihood_directed_weighted
+from ..network_likelihoods import dynamic_network_loglikelihood_undirected_weighted
 from ..array_utils import nondiag_indices_from_3d
 
 
@@ -11,7 +13,7 @@ __all__ = ['select_bic']
 
 class DynamicNetworkMixtureModel:
     def __init__(self, beta, init_weights, trans_weights, X, mu, sigma, lmbda,
-                 z, intercept, radii=None):
+                 z, intercept, radii=None, nu=None):
         self.beta = beta
         self.init_weights = init_weights
         self.trans_weights = trans_weights
@@ -22,6 +24,7 @@ class DynamicNetworkMixtureModel:
         self.z = z
         self.intercept = intercept
         self.radii = radii
+        self.nu = nu
 
 
 def calculate_cluster_counts_t(model):
@@ -99,6 +102,7 @@ def select_bic(model):
         weights = model.weights_[map_id]
         lmbda = model.lambdas_[map_id]
         radii = model.radiis_[map_id] if model.is_directed else None
+        nu = model.nus_[map_id] if model.is_weighted else None
 
         # re-normalize weights
         active_clusters = np.unique(model.zs_[map_id].ravel())
@@ -120,23 +124,42 @@ def select_bic(model):
         sigma = sigma[active_clusters]
 
         # BIC component for P(Y | X)
-        if model.is_directed:
-            loglik_k = dynamic_network_loglikelihood_directed(
-                            model.Y_fit_, X,
-                            intercept_in=intercept[0],
-                            intercept_out=intercept[1],
-                            radii=radii)
-            bic_k = -2 * loglik_k
+        if model.is_weighted:
+            if model.is_directed:
+                loglik_k = dynamic_network_loglikelihood_directed_weighted(model.Y_fit_, X,
+                                                                           intercept_in=intercept[0],
+                                                                           intercept_out=intercept[1],
+                                                                           radii=radii,
+                                                                           nu=nu)
+                bic_k = -2 * loglik_k
 
-            n_params = 2 + n_nodes
-            nondiag_indices = nondiag_indices_from_3d(model.Y_fit_)
-            bic_k += n_params * np.log(np.sum(model.Y_fit_[nondiag_indices]))
+                n_params = 2 + n_nodes
+                nondiag_indices = nondiag_indices_from_3d(model.Y_fit_)
+                bic_k += n_params * np.log(np.sum(model.Y_fit_[nondiag_indices]))
+            else:
+                loglik_k = dynamic_network_loglikelihood_undirected_weighted(
+                    model.Y_fit_, X, intercept, nu)
+                bic_k = -2 * loglik_k
+                bic_k += np.log(0.5 * (
+                    np.sum(model.Y_fit_) - np.einsum('ikk', model.Y_fit_).sum()))
         else:
-            loglik_k = dynamic_network_loglikelihood_undirected(
-                model.Y_fit_, X, intercept)
-            bic_k = -2 * loglik_k
-            bic_k += np.log(0.5 * (
-                np.sum(model.Y_fit_) - np.einsum('ikk', model.Y_fit_).sum()))
+            if model.is_directed:
+                loglik_k = dynamic_network_loglikelihood_directed(
+                    model.Y_fit_, X,
+                    intercept_in=intercept[0],
+                    intercept_out=intercept[1],
+                    radii=radii)
+                bic_k = -2 * loglik_k
+
+                n_params = 2 + n_nodes
+                nondiag_indices = nondiag_indices_from_3d(model.Y_fit_)
+                bic_k += n_params * np.log(np.sum(model.Y_fit_[nondiag_indices]))
+            else:
+                loglik_k = dynamic_network_loglikelihood_undirected(
+                    model.Y_fit_, X, intercept)
+                bic_k = -2 * loglik_k
+                bic_k += np.log(0.5 * (
+                        np.sum(model.Y_fit_) - np.einsum('ikk', model.Y_fit_).sum()))
 
         # BIC component for P(X | G) = P(X | mu, sigma, w)
         bic_k -= 2 * latent_marginal_loglikelihood(
@@ -155,7 +178,8 @@ def select_bic(model):
                                              lmbda=lmbda,
                                              z=model.zs_[map_id],
                                              intercept=intercept,
-                                             radii=radii)
+                                             radii=radii,
+                                             nu=nu)
         bic.append([k, bic_k, loglik_k, map_id])
         models.append(model_k)
 
