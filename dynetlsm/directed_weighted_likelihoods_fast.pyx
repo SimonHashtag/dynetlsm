@@ -121,3 +121,26 @@ def directed_weighted_network_loglikelihood_fast(DOUBLE[:, :, ::1] Y,
                         loglik += log(1 - expit(1.702*eta/std))
 
     return loglik
+
+
+def directed_weighted_network_ystar(DOUBLE[:, :, :] dist,
+                                     DOUBLE[:] radii,
+                                     double intercept_in,
+                                     double intercept_out):
+    cdef int i, j, t = 0
+    cdef int n_time_steps = dist.shape[0]
+    cdef int n_nodes = dist.shape[1]
+    cdef double d_in, d_out
+
+    cdef DOUBLE[:, :, :] eta = np.zeros_like(dist)
+
+    for t in range(n_time_steps):
+        for i in range(n_nodes):
+            for j in range(n_nodes):
+                if i != j:
+                    d_in = (1 - dist[t, i, j] / radii[j])
+                    d_out = (1 - dist[t, i, j] / radii[i])
+                    eta[t, i, j] = intercept_in * d_in + intercept_out * d_out
+                    #Y_star[t, i, j] = eta + random_normal(rng, loc, std)
+
+    return np.asarray(eta)
