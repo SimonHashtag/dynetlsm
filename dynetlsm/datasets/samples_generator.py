@@ -11,7 +11,9 @@ from sklearn.datasets import make_blobs
 from sklearn.metrics import pairwise_distances
 from sklearn.utils import check_random_state
 
-from ..network_likelihoods import directed_network_probas
+from ..network_likelihoods import (
+    directed_network_probas,
+    directed_weighted_network_ystar)
 from ..latent_space import calculate_distances
 
 
@@ -22,32 +24,51 @@ __all__ = ['network_from_dynamic_latent_space',
 
 
 def network_from_dynamic_latent_space(X, intercept=1, coef=1,
-                                      radii=None,
+                                      radii=None, nu=None,
                                       metric='euclidean', random_state=None):
     rng = check_random_state(random_state)
 
     n_time_steps, n_nodes, _ = X.shape
     Y = np.zeros((n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     dij = calculate_distances(X)
+    Y_star = np.zeros((n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     probas = np.zeros((n_time_steps, n_nodes, n_nodes), dtype=np.float64)
-    if radii is not None:
-        probas = directed_network_probas(
-            dij, radii, intercept[0], intercept[1])
+    if nu is not None:
+        if radii is not None:
+            eta = directed_weighted_network_ystar(
+                dij, radii, intercept[0], intercept[1])
+            Y_star = eta + rng.normal(loc=0.0, scale=np.sqrt(nu), size=(n_time_steps, n_nodes, n_nodes))
 
-    for t in range(n_time_steps):
-        # sample the adjacency matrix
-        if radii is None:
-            eta = intercept - coef * dij[t]
-            pij = np.exp(eta) / (1 + np.exp(eta))
-            probas[t] = pij
-        else:
-            pij = probas[t]
-        Y[t] = rng.binomial(1, pij).astype(np.int)
-        if radii is None:
-            Y[t] = np.triu(Y[t], 1)
-            Y[t] += Y[t].T
+        for t in range(n_time_steps):
+            # sample the adjacency matrix
+            if radii is None:
+                eta = intercept - coef * dij[t]
+                Y_star[t] = eta + rng.normal(loc=0.0, scale=np.sqrt(nu), size=(n_nodes, n_nodes))
+            Y[t] = Y_star[t]
+            below_zero_index = Y[t] <= 0
+            Y[t][below_zero_index] = 0
+            if radii is None:
+                Y[t] = np.triu(Y[t], 1)
+                Y[t] += Y[t].T
+    else:
+        if radii is not None:
+            probas = directed_network_probas(
+                dij, radii, intercept[0], intercept[1])
 
-    return Y, probas
+        for t in range(n_time_steps):
+            # sample the adjacency matrix
+            if radii is None:
+                eta = intercept - coef * dij[t]
+                pij = np.exp(eta) / (1 + np.exp(eta))
+                probas[t] = pij
+            else:
+                pij = probas[t]
+            Y[t] = rng.binomial(1, pij).astype(np.int)
+            if radii is None:
+                Y[t] = np.triu(Y[t], 1)
+                Y[t] += Y[t].T
+
+    return Y, probas, Y_star
 
 
 def simple_splitting_dynamic_network(n_nodes=120, n_time_steps=9,
@@ -286,7 +307,7 @@ def synthetic_static_community_dynamic_network(
 def synthetic_dynamic_network(n_nodes=120, n_time_steps=9,
                               intercept=1.0, lmbda=0.8, sticky_const=20.,
                               sigma_shape=6, sigma_scale=20, is_directed=False,
-                              random_state=42):
+                              is_weighted=False, random_state=42):
     """Split from 2 -> 6 and then merge from 6 -> 4"""
     rng = check_random_state(random_state)
 
@@ -379,8 +400,9 @@ def synthetic_dynamic_network(n_nodes=120, n_time_steps=9,
 
     # self-transitions
     infinite_mask = ~np.isfinite(wt_merge)
-    wt_merge[infinite_mask] = 0
-    wt_merge[infinite_mask] = np.max(wt_merge, axis=1)
+    if wt_merge[infinite_mask].size:
+        wt_merge[infinite_mask] = 0
+        wt_merge[infinite_mask] = np.max(wt_merge, axis=1)
     wt_merge /= wt_merge.sum(axis=1).reshape(-1, 1)
 
     zt = np.zeros(n_nodes, dtype=np.int)
@@ -496,16 +518,29 @@ def synthetic_dynamic_network(n_nodes=120, n_time_steps=9,
     X = np.stack(X, axis=0)
     z = np.vstack(z)
 
-    # generate radii if necessary
-    if is_directed:
-        norms = 1. / np.linalg.norm(X[0], axis=1)
-        norms /= np.max(norms)
-        radii = rng.dirichlet(100 * norms)
-        intercept = np.array([0.3, 0.7])
+    if is_weighted:
+        # generate nu
+        nu = 4
+        # generate radii if necessary
+        if is_directed:
+            norms = 1. / np.linalg.norm(X[0], axis=1)
+            norms /= np.max(norms)
+            radii = rng.dirichlet(100 * norms)
+            intercept = np.array([3, 1])
+        else:
+            radii = None
     else:
-        radii = None
+        nu = None
+        # generate radii if necessary
+        if is_directed:
+            norms = 1. / np.linalg.norm(X[0], axis=1)
+            norms /= np.max(norms)
+            radii = rng.dirichlet(100 * norms)
+            intercept = np.array([0.3, 0.7])
+        else:
+            radii = None
 
-    Y, probas = network_from_dynamic_latent_space(
-        X, intercept=intercept, radii=radii, random_state=rng)
+    Y, probas, Y_star = network_from_dynamic_latent_space(
+        X, intercept=intercept, radii=radii, nu=nu, random_state=rng)
 
-    return Y, X, z, intercept, radii, probas
+    return Y, X, z, intercept, radii, nu, probas, Y_star
