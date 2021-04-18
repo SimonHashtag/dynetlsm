@@ -12,7 +12,9 @@ from .directed_likelihoods_fast import (
     approx_directed_network_loglikelihood)
 from .directed_weighted_likelihoods_fast import (
     directed_weighted_network_loglikelihood_fast,
-    directed_weighted_partial_loglikelihood, directed_weighted_intercept_grad)
+    directed_weighted_partial_loglikelihood,
+    directed_weighted_intercept_grad,
+    directed_weighted_network_ystar)
 from .static_network_fast import (
     partial_loglikelihood,
     partial_weighted_loglikelihood)
