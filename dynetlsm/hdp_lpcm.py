@@ -426,7 +426,7 @@ class DynamicNetworkHDPLPCM(object):
                  step_size_X='auto',
                  step_size_intercept=0.1,
                  step_size_radii=175000,
-                 step_size_nu=0.05,
+                 step_size_nu=1.5,
                  n_control=None,
                  n_resample_control=100,
                  copy=True,
@@ -625,7 +625,7 @@ class DynamicNetworkHDPLPCM(object):
         if self.is_weighted:
             self.nu_sampler = Metropolis(step_size=self.step_size_nu,
                                          tune=self.tune,
-                                         proposal_type='random_walk_constrained')
+                                         proposal_type='lognormal')
 
         # initialize hyper-parameters
         if self.intercept_prior == 'auto':
