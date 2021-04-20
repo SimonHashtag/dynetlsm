@@ -84,11 +84,6 @@ def dirichlet_metropolis(x0, logp, step_size, random_state, reg=1e-5):
 def random_walk_metropolis_constrained(x0, logp, step_size, random_state):
     n_features = x0.shape[0]
 
-    # random walk proposal
-    # x=0
-    # while x <= 0:
-    #     x = x0 + step_size * random_state.randn(n_features)
-
     x = (1 - step_size) * stats.truncnorm.rvs(a=0-x0,
                                               b=np.Inf,
                                               loc=x0, scale=1,
@@ -97,6 +92,22 @@ def random_walk_metropolis_constrained(x0, logp, step_size, random_state):
 
     # accept-reject
     accept_ratio = logp(x) - logp(x0) + stats.norm.logcdf(x0) - stats.norm.logcdf(x)
+    accepted = 1
+    u = random_state.rand()
+    if np.log(u) >= accept_ratio:
+        x = x0
+        accepted = 0
+
+    return x, accepted, accept_ratio
+
+def lognormal_metropolis(x0, logp, step_size, random_state):
+    n_features = x0.shape[0]
+
+    x = random_state.lognormal(mean=x0,
+                               sigma=step_size,
+                               size=n_features)
+
+    accept_ratio = logp(x) - logp(x0) + stats.lognorm.logcdf(x0, step_size) - stats.lognorm.logcdf(x, step_size)
     accepted = 1
     u = random_state.rand()
     if np.log(u) >= accept_ratio:
@@ -128,6 +139,11 @@ class Metropolis(object):
                                                         logp,
                                                         self.step_size,
                                                         random_state)
+        elif self.proposal_type == 'lognormal':
+            x_new, accepted, _ = lognormal_metropolis(x,
+                                                      logp,
+                                                      self.step_size,
+                                                      random_state)
         elif self.proposal_type == 'random_walk_constrained':
             x_new, accepted, _ = random_walk_metropolis_constrained(x,
                                                                     logp,
@@ -135,7 +151,7 @@ class Metropolis(object):
                                                                     random_state)
         else:
             raise ValueError("`proposal_type` must be in "
-                             "{'random_walk', 'random_walk_constrained', 'dirichlet'}, but got "
+                             "{'random_walk', 'random_walk_constrained', 'lognormal', 'dirichlet'}, but got "
                              "{}".format(self.proposal_type))
 
         # track acceptance statistics for adaptation
