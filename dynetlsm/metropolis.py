@@ -103,11 +103,11 @@ def random_walk_metropolis_constrained(x0, logp, step_size, random_state):
 def lognormal_metropolis(x0, logp, step_size, random_state):
     n_features = x0.shape[0]
 
-    x = random_state.lognormal(mean=x0,
+    x = random_state.lognormal(mean=np.log(x0),
                                sigma=step_size,
                                size=n_features)
 
-    accept_ratio = logp(x) - logp(x0) + stats.lognorm.logcdf(x0, step_size) - stats.lognorm.logcdf(x, step_size)
+    accept_ratio = logp(x) - logp(x0) + stats.lognorm.logpdf(x0, s=step_size, loc=np.log(x)) - stats.lognorm.logpdf(x, s=step_size, loc=np.log(x0)) #+ np.log(x0) - np.log(x)
     accepted = 1
     u = random_state.rand()
     if np.log(u) >= accept_ratio:
