@@ -18,7 +18,7 @@ cdef inline double expit(double z):
     return 1. / (1. + exp(-z))
 
 # TODO: Case-control sampler for directed weighted network (see directed_likelihodds_fast.pyx)
-# TODO: Directed weighted network probas for ROC AUC calculation in ..._simulation.py
+# TODO: Alternative to probas for ROC AUC calculation in ..._simulation.py
 
 def directed_weighted_intercept_grad(DOUBLE[:, :, :] Y,
                                      DOUBLE[:, :, :] dist,
@@ -81,14 +81,14 @@ def directed_weighted_partial_loglikelihood(DOUBLE[:, ::1] Y,
             # Y_ijt
             eta = intercept_in * (1 - dist / radii[j]) + intercept_out * (1 - dist / radii[node_id])
             if Y[node_id, j] > 0:
-                loglik += -log(std) - 1/2 * log(2*M_PI) - 1/2*((Y[node_id, j] - eta)/std)**2
+                loglik += -log(std) - 1/2*((Y[node_id, j] - eta)**2/nu)
             else:
                 loglik += log(1 - expit(1.702*eta/std))
 
             # Y_jit
             eta = intercept_in * (1 - dist / radii[node_id]) + intercept_out * (1 - dist / radii[j])
             if Y[j, node_id] > 0:
-                loglik += -log(std) - 1/2 * log(2*M_PI) - 1/2*((Y[j, node_id] - eta)/std)**2
+                loglik +=  -log(std) - 1/2*((Y[j, node_id] - eta)**2/nu)
             else:
                 loglik += log(1 - expit(1.702*eta/std))
 
@@ -116,7 +116,7 @@ def directed_weighted_network_loglikelihood_fast(DOUBLE[:, :, ::1] Y,
                     d_out = (1 - dist[t, i, j] / radii[i])
                     eta = intercept_in * d_in + intercept_out * d_out
                     if Y[t, i, j] > 0:
-                        loglik += -log(std) - 1/2 * log(2*M_PI) - 1/2*((Y[t, i, j] - eta)/std)**2
+                        loglik += -log(std) - 1/2*((Y[t, i, j] - eta)**2 / nu)
                     else:
                         loglik += log(1 - expit(1.702*eta/std))
 
