@@ -416,7 +416,7 @@ class DynamicNetworkHDPLPCM(object):
                  intercept_variance_prior=2,
                  mean_variance_prior='auto',
                  delta=0.05,
-                 zeta_sq=2.5,
+                 zeta_sq=4,
                  a=2.0,
                  b='auto',
                  lambda_prior=0.9,
@@ -1079,7 +1079,7 @@ class DynamicNetworkHDPLPCM(object):
         self.intercepts_mean_ = self.intercepts_[n_burn:].mean(axis=0)
         if self.is_directed:
             self.radii_mean_ = self.radiis_[n_burn:].mean(axis=0)
-        if self.is_directed:
+        if self.is_weighted:
             self.nu_mean_ = self.nus_[n_burn:].mean(axis=0)
 
         # store posterior group count probabilities
