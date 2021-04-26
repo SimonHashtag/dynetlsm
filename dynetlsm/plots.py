@@ -606,7 +606,7 @@ def plot_latent_space_lsm(model, t=0,
         sizes = node_size
 
     for i, j in zip(row, col):
-        if model.Y_fit_[t, i, j] == 1.0:
+        if model.Y_fit_[t, i, j] > 0.0:
             x1 = X[t, i]
             x2 = X[t, j]
 
@@ -743,7 +743,7 @@ def plot_latent_space_lpcm(model, t=0, estimate_type='best',
         sizes = node_size
 
     for i, j in zip(row, col):
-        if model.Y_fit_[t, i, j] == 1.0:
+        if model.Y_fit_[t, i, j] > 0.0:
             x1 = X[t, i]
             x2 = X[t, j]
 
