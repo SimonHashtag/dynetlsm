@@ -17,6 +17,8 @@ ctypedef np.npy_int64 INT
 cdef inline double expit(double z):
     return 1. / (1. + exp(-z))
 
+# Normal cdf is approximated via logistic function here to increase speed.
+
 # TODO: Case-control sampler for directed weighted network (see directed_likelihodds_fast.pyx)
 # TODO: Alternative to probas for ROC AUC calculation in ..._simulation.py
 
@@ -44,7 +46,7 @@ def directed_weighted_intercept_grad(DOUBLE[:, :, :] Y,
                         step = (Y[t, i, j] - eta)/nu
                     else:
                         x = eta/std
-                        step = (-exp(-1/2*x**2)/(sqrt(2*M_PI)*std))/(1-expit(1.702*x))
+                        step = (-exp(-(x**2)/2)/(sqrt(2*M_PI)*std))/(1-expit(1.702*x))
 
                     in_grad += d_in * step
                     out_grad += d_out * step
@@ -81,14 +83,14 @@ def directed_weighted_partial_loglikelihood(DOUBLE[:, ::1] Y,
             # Y_ijt
             eta = intercept_in * (1 - dist / radii[j]) + intercept_out * (1 - dist / radii[node_id])
             if Y[node_id, j] > 0:
-                loglik += -log(std) - 1/2*((Y[node_id, j] - eta)**2/nu)
+                loglik -= (log(std) + ((Y[node_id, j] - eta)**2 / (2*nu)))
             else:
                 loglik += log(1 - expit(1.702*eta/std))
 
             # Y_jit
             eta = intercept_in * (1 - dist / radii[node_id]) + intercept_out * (1 - dist / radii[j])
             if Y[j, node_id] > 0:
-                loglik +=  -log(std) - 1/2*((Y[j, node_id] - eta)**2/nu)
+                loglik -=  (log(std) + ((Y[j, node_id] - eta)**2 / (2*nu)))
             else:
                 loglik += log(1 - expit(1.702*eta/std))
 
@@ -116,7 +118,7 @@ def directed_weighted_network_loglikelihood_fast(DOUBLE[:, :, ::1] Y,
                     d_out = (1 - dist[t, i, j] / radii[i])
                     eta = intercept_in * d_in + intercept_out * d_out
                     if Y[t, i, j] > 0:
-                        loglik += -log(std) - 1/2*((Y[t, i, j] - eta)**2 / nu)
+                        loglik -= ((Y[t, i, j] - eta)**2) / (2*nu) + log(std)
                     else:
                         loglik += log(1 - expit(1.702*eta/std))
 
