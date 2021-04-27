@@ -5,6 +5,7 @@ from sklearn.metrics.cluster import entropy
 
 from .array_utils import triu_indices_from_3d
 from .array_utils import nondiag_indices_from_3d
+from .latent_space import calculate_distances
 
 
 def network_auc(Y_true, Y_pred, is_directed=False):
@@ -44,3 +45,20 @@ def variation_of_information(labels_true, labels_pred):
     mutual_info = mutual_info_score(labels_true, labels_pred)
 
     return entropy_true + entropy_pred - 2 * mutual_info
+
+def pseudo_R_squared(intercepts_mean, X_mean, radii_mean, nu_mean):
+    n_time_steps, n_nodes, _ = X_mean.shape
+    distances_mean = calculate_distances(X_mean, squared=False)
+    y_squared = 0.
+    y = 0.
+    for t in range(n_time_steps):
+        for i in range(n_nodes):
+            for j in range(n_nodes):
+                if i != j:
+                    y_squared += (intercepts_mean[0] * (1 - distances_mean[t,i,j]/radii_mean[j]) + intercepts_mean[1] * (1 - distances_mean[t,i,j]/radii_mean[i]))**2
+                    y += (intercepts_mean[0] * (1 - distances_mean[t,i,j]/radii_mean[j]) + intercepts_mean[1] * (1 - distances_mean[t,i,j]/radii_mean[i]))
+    y_bar = y / (n_time_steps*n_nodes*(n_nodes-1))
+    numerator = y_squared - (n_time_steps*n_nodes*(n_nodes-1)) * y_bar**2
+    denominator = numerator + n_time_steps * n_nodes * (n_nodes - 1) * nu_mean
+
+    return float(numerator / denominator)
