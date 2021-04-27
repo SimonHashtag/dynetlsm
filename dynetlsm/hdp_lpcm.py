@@ -426,7 +426,7 @@ class DynamicNetworkHDPLPCM(object):
                  step_size_X='auto',
                  step_size_intercept=0.1,
                  step_size_radii=175000,
-                 step_size_nu=1.5,
+                 step_size_nu=1.25,
                  n_control=None,
                  n_resample_control=100,
                  copy=True,

@@ -8,8 +8,7 @@ from .network_likelihoods import (
     partial_weighted_loglikelihood,
     directed_partial_loglikelihood,
     approx_directed_partial_loglikelihood,
-    directed_weighted_partial_loglikelihood
-)
+    directed_weighted_partial_loglikelihood)
 
 
 def sample_control_nodes(edge_list, n_samples=100, random_state=None):

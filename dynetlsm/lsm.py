@@ -304,11 +304,11 @@ class DynamicNetworkLSM(object):
                  tau_sq=2.0,
                  sigma_sq=0.1,
                  delta=0.05,
-                 zeta_sq=2.5,
+                 zeta_sq=4,
                  step_size_X=0.1,
                  step_size_intercept=0.1,
                  step_size_radii=175000,
-                 step_size_nu=1.5,
+                 step_size_nu=1.25,
                  n_control=None,
                  n_resample_control=100,
                  copy=True,
@@ -463,7 +463,7 @@ class DynamicNetworkLSM(object):
                 # initialize radii
                 radii = initialize_radii(self.Y_fit_)
                 # initialize nu_sq (for initialization error term is assumed to be standard gaussian distributed -> nu_sq=1)
-                nu = 1
+                nu = 1.
                 # initialize intercept
                 intercept_in, intercept_out = directed_intercept_mle(self.Y_fit_, X,
                                                                      radii=radii, nu=nu,
@@ -472,7 +472,7 @@ class DynamicNetworkLSM(object):
                 intercept = np.array([intercept_in, intercept_out])
             else:
                 # initialize nu_sq
-                nu = 1
+                nu = 1.
                 scale, intercept = scale_intercept_mle(self.Y_fit_, X,
                                                        nu=nu, is_weighted=self.is_weighted,
                                                        squared=False)

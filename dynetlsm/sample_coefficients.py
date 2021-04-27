@@ -7,8 +7,7 @@ from .network_likelihoods import (
     dynamic_network_loglikelihood_undirected,
     approx_directed_network_loglikelihood,
     dynamic_network_loglikelihood_directed_weighted,
-    dynamic_network_loglikelihood_undirected_weighted
-)
+    dynamic_network_loglikelihood_undirected_weighted)
 
 
 def sample_intercepts(Y, X, intercepts, intercept_prior,
@@ -152,7 +151,7 @@ def sample_radii(Y, X, intercepts, radii, sampler, nu=None, dist=None,
 
     if is_weighted:
         def logp(x):
-            # NOTE: dirichlet prior (this is constant for alpha = 1.0
+            # NOTE: dirichlet prior (this is constant for alpha = 1.0)
             if case_control_sampler:
                 # TODO: Loglikelihood for case_control_sampler in weighted case
                 raise ValueError('The case-control likelihood currently only '
@@ -203,7 +202,7 @@ def sample_nu(Y, X, delta, zeta_sq, intercepts, nu, sampler, radii=None, dist=No
 
     if is_directed:
         def logp(x):
-            # sample nu squared: distributed as inverse gamma (IG(a, b).
+            # sample nu squared: distributed as inverse gamma (IG(a, b)).
             # a = 2 + delta, b = (1 + delta) * tau_squared with small delta and pos. const. tau**2
             if case_control_sampler:
                 # TODO: Loglikelihood for case_control_sampler in weighted case
@@ -223,7 +222,7 @@ def sample_nu(Y, X, delta, zeta_sq, intercepts, nu, sampler, radii=None, dist=No
             return loglik
     else:
         def logp(x):
-            # sample nu squared: distributed as inverse gamma (IG(a, b).
+            # sample nu squared: prior distributed as inverse gamma (IG(a, b)).
             # a = 2 + delta, b = (1 + delta) * tau_squared with small delta and pos. const. tau**2
             loglik = dynamic_network_loglikelihood_undirected_weighted(
                 Y, X,
