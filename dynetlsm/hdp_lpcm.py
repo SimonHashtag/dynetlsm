@@ -651,21 +651,21 @@ class DynamicNetworkHDPLPCM(object):
 
         if self.mean_variance_prior_std is not None:
             self.a0_ = (self.mean_variance_prior_std ** 2 + 2) * 2
-            self.b0_ = (self.a0_ - 2) * self.mean_variance_prior_ * 2
+            self.b0_ = (self.a0_ - 2)/2 * self.mean_variance_prior_ * 2
 
         # NOTE: This sets the scale of the cluster sizes. Default is to assume
         # there is no cluster structure.
-        # b ~ Gamma(c/2, d/2) hyper-prior chossen so that
+        # b ~ Gamma(c/2, d/2) hyper-prior chosen so that
         #
         # E(b) = b
         # sqrt(Var(b)) = sigma_prior_std * E(b)
         if self.b == 'auto':
             if self.is_directed:
                 # Mode(sigma**2) = (1 / n_nodes) * (1 / self.n_components)
-                self.b_ = (self.a + 2) * self.mean_variance_prior_
+                self.b_ = (self.a + 1) * self.mean_variance_prior_
             else:
                 # Mode(sigma ** 2) = n_nodes / self.n_components
-                self.b_ = (self.a + 2) * self.mean_variance_prior_
+                self.b_ = (self.a + 1) * self.mean_variance_prior_
         else:
             self.b_ = self.b
 
