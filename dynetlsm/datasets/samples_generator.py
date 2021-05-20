@@ -306,7 +306,7 @@ def synthetic_static_community_dynamic_network(
 
 def synthetic_dynamic_network(n_nodes=120, n_time_steps=9,
                               intercept=1.0, lmbda=0.8, sticky_const=20.,
-                              sigma_shape=6, sigma_scale=20, is_directed=False,
+                              sigma_shape=6, sigma_scale=20, nu=4, is_directed=False,
                               is_weighted=False, random_state=42):
     """Split from 2 -> 6 and then merge from 6 -> 4"""
     rng = check_random_state(random_state)
@@ -520,13 +520,13 @@ def synthetic_dynamic_network(n_nodes=120, n_time_steps=9,
 
     if is_weighted:
         # generate nu
-        nu = 4
+        nu = nu
         # generate radii if necessary
         if is_directed:
             norms = 1. / np.linalg.norm(X[0], axis=1)
             norms /= np.max(norms)
             radii = rng.dirichlet(100 * norms)
-            intercept = np.array([3, 1])
+            intercept = np.array([3, 1]) if np.shape(intercept) != (2,) else np.array(intercept)
         else:
             radii = None
     else:
