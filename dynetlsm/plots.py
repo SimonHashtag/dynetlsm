@@ -270,23 +270,44 @@ def plot_traces_hdp_lpcm(model, figsize=(10, 12), maxlags=100, fontsize=8):
     fig = plt.figure(figsize=figsize)
     colors = get_color20()
 
-    if model.is_directed:
-        gs = gridspec.GridSpec(nrows=4, ncols=3)
-        ax = np.array([[plt.subplot(gs[0, :]), None, None],
-                       [plt.subplot(gs[1, 0]), plt.subplot(gs[1, 1]),
-                        plt.subplot(gs[1, 2])],
-                       [plt.subplot(gs[2, 0]), plt.subplot(gs[2, 1]),
-                        plt.subplot(gs[2, 2])],
-                       [plt.subplot(gs[3, 0]), plt.subplot(gs[3, 1]),
-                        plt.subplot(gs[3, 2])]])
+    if model.is_weighted:
+        if model.is_directed:
+            gs = gridspec.GridSpec(nrows=5, ncols=3)
+            ax = np.array([[plt.subplot(gs[0, :]), None, None],
+                           [plt.subplot(gs[1, 0]), plt.subplot(gs[1, 1]),
+                            plt.subplot(gs[1, 2])],
+                           [plt.subplot(gs[2, 0]), plt.subplot(gs[2, 1]),
+                            plt.subplot(gs[2, 2])],
+                           [plt.subplot(gs[3, 0]), plt.subplot(gs[3, 1]),
+                            plt.subplot(gs[3, 2])],
+                           [plt.subplot(gs[4, 0]), plt.subplot(gs[4, 1]),
+                            plt.subplot(gs[4, 2])]])
+        else:
+            gs = gridspec.GridSpec(nrows=4, ncols=3)
+            ax = np.array([[plt.subplot(gs[0, :]), None, None],
+                           [plt.subplot(gs[1, 0]), plt.subplot(gs[1, 1]),
+                            plt.subplot(gs[1, 2])],
+                           [plt.subplot(gs[2, 0]), plt.subplot(gs[2, 1]),
+                            plt.subplot(gs[2, 2])],
+                           [plt.subplot(gs[3, 0]), plt.subplot(gs[3, 1]),
+                            plt.subplot(gs[3, 2])]])
     else:
-        gs = gridspec.GridSpec(nrows=3, ncols=3)
-        ax = np.array([[plt.subplot(gs[0, :]), None, None],
-                       [plt.subplot(gs[1, 0]), plt.subplot(gs[1, 1]),
-                        plt.subplot(gs[1, 2])],
-                       [plt.subplot(gs[2, 0]), plt.subplot(gs[2, 1]),
-                        plt.subplot(gs[2, 2])]])
-
+        if model.is_directed:
+            gs = gridspec.GridSpec(nrows=4, ncols=3)
+            ax = np.array([[plt.subplot(gs[0, :]), None, None],
+                           [plt.subplot(gs[1, 0]), plt.subplot(gs[1, 1]),
+                            plt.subplot(gs[1, 2])],
+                           [plt.subplot(gs[2, 0]), plt.subplot(gs[2, 1]),
+                            plt.subplot(gs[2, 2])],
+                           [plt.subplot(gs[3, 0]), plt.subplot(gs[3, 1]),
+                            plt.subplot(gs[3, 2])]])
+        else:
+            gs = gridspec.GridSpec(nrows=3, ncols=3)
+            ax = np.array([[plt.subplot(gs[0, :]), None, None],
+                           [plt.subplot(gs[1, 0]), plt.subplot(gs[1, 1]),
+                            plt.subplot(gs[1, 2])],
+                           [plt.subplot(gs[2, 0]), plt.subplot(gs[2, 1]),
+                            plt.subplot(gs[2, 2])]])
     # change fontsize of graph
     for a in ax.ravel():
         if a is not None:
@@ -337,22 +358,57 @@ def plot_traces_hdp_lpcm(model, figsize=(10, 12), maxlags=100, fontsize=8):
                       verticalalignment='center',
                       transform=ax[2, 2].transAxes)
 
-        sns.kdeplot(model.lambdas_[n_burn:].ravel(), ax=ax[3, 0],
-                    shade=True, color=colors[4])
-        ax[3, 0].set_title(r'Blending Coefficient $\lambda$', fontsize=fontsize)
-        ax[3, 1].plot(model.lambdas_, c=colors[4])
+        if model.is_weighted:
+            sns.kdeplot(model.nus_[n_burn:].ravel(), ax=ax[3, 0],
+                        shade=True, color=colors[3])
+            ax[3, 0].set_title(r'Variance $\nu^2$', fontsize=fontsize)
+            ax[3, 1].plot(model.nus_, c=colors[3])
 
-        x = model.lambdas_.ravel()[n_burn:]
-        lags, corr, _, _ = ax[3, 2].acorr(x - np.mean(x), maxlags=maxlags,
-                                          normed=True, usevlines=True,
-                                          alpha=0.5)
-        ax[3, 2].set_xlim((0, maxlags))
-        ax[3, 2].text(0.5, 0.9,
-                      'ESS = {:.2f}'.format(effective_n(x, lags, corr)),
-                      fontsize=8,
-                      horizontalalignment='left',
-                      verticalalignment='center',
-                      transform=ax[3, 2].transAxes)
+            x = model.nus_.ravel()[n_burn:]
+            lags, corr, _, _ = ax[3, 2].acorr(x - np.mean(x), maxlags=maxlags,
+                                              normed=True, usevlines=True,
+                                              alpha=0.5)
+            ax[3, 2].set_xlim((0, maxlags))
+            ax[3, 2].text(0.5, 0.9,
+                          'ESS = {:.2f}'.format(effective_n(x, lags, corr)),
+                          fontsize=8,
+                          horizontalalignment='left',
+                          verticalalignment='center',
+                          transform=ax[3, 2].transAxes)
+
+            sns.kdeplot(model.lambdas_[n_burn:].ravel(), ax=ax[4, 0],
+                        shade=True, color=colors[4])
+            ax[4, 0].set_title(r'Blending Coefficient $\lambda$', fontsize=fontsize)
+            ax[4, 1].plot(model.lambdas_, c=colors[4])
+
+            x = model.lambdas_.ravel()[n_burn:]
+            lags, corr, _, _ = ax[4, 2].acorr(x - np.mean(x), maxlags=maxlags,
+                                              normed=True, usevlines=True,
+                                              alpha=0.5)
+            ax[4, 2].set_xlim((0, maxlags))
+            ax[4, 2].text(0.5, 0.9,
+                          'ESS = {:.2f}'.format(effective_n(x, lags, corr)),
+                          fontsize=8,
+                          horizontalalignment='left',
+                          verticalalignment='center',
+                          transform=ax[4, 2].transAxes)
+        else:
+            sns.kdeplot(model.lambdas_[n_burn:].ravel(), ax=ax[3, 0],
+                        shade=True, color=colors[4])
+            ax[3, 0].set_title(r'Blending Coefficient $\lambda$', fontsize=fontsize)
+            ax[3, 1].plot(model.lambdas_, c=colors[4])
+
+            x = model.lambdas_.ravel()[n_burn:]
+            lags, corr, _, _ = ax[3, 2].acorr(x - np.mean(x), maxlags=maxlags,
+                                              normed=True, usevlines=True,
+                                              alpha=0.5)
+            ax[3, 2].set_xlim((0, maxlags))
+            ax[3, 2].text(0.5, 0.9,
+                          'ESS = {:.2f}'.format(effective_n(x, lags, corr)),
+                          fontsize=8,
+                          horizontalalignment='left',
+                          verticalalignment='center',
+                          transform=ax[3, 2].transAxes)
     else:
         sns.kdeplot(model.intercepts_[n_burn:].ravel(), ax=ax[1, 0],
                     shade=True, color=colors[1])
@@ -371,22 +427,57 @@ def plot_traces_hdp_lpcm(model, figsize=(10, 12), maxlags=100, fontsize=8):
                       verticalalignment='center',
                       transform=ax[1, 2].transAxes)
 
-        sns.kdeplot(model.lambdas_[n_burn:].ravel(), ax=ax[2, 0], shade=True,
-                    color=colors[2])
-        ax[2, 0].set_title(r'Blending Coefficient $\lambda$', fontsize=fontsize)
-        ax[2, 1].plot(model.lambdas_, c=colors[2])
+        if model.is_weighted:
+            sns.kdeplot(model.nus_[n_burn:].ravel(), ax=ax[2, 0], shade=True,
+                        color=colors[3])
+            ax[2, 0].set_title(r'Variance $\nu^2$', fontsize=fontsize)
+            ax[2, 1].plot(model.nus_, c=colors[3])
 
-        x = model.lambdas_.ravel()[n_burn:]
-        lags, corr, _, _ = ax[2, 2].acorr(x - np.mean(x), maxlags=maxlags,
-                                          normed=True, usevlines=True,
-                                          alpha=0.5)
-        ax[2, 2].set_xlim((0, maxlags))
-        ax[2, 2].text(0.5, 0.9,
-                      'ESS = {:.2f}'.format(effective_n(x, lags, corr)),
-                      fontsize=8,
-                      horizontalalignment='left',
-                      verticalalignment='center',
-                      transform=ax[2, 2].transAxes)
+            x = model.nus_.ravel()[n_burn:]
+            lags, corr, _, _ = ax[2, 2].acorr(x - np.mean(x), maxlags=maxlags,
+                                              normed=True, usevlines=True,
+                                              alpha=0.5)
+            ax[2, 2].set_xlim((0, maxlags))
+            ax[2, 2].text(0.5, 0.9,
+                          'ESS = {:.2f}'.format(effective_n(x, lags, corr)),
+                          fontsize=8,
+                          horizontalalignment='left',
+                          verticalalignment='center',
+                          transform=ax[2, 2].transAxes)
+
+            sns.kdeplot(model.lambdas_[n_burn:].ravel(), ax=ax[3, 0], shade=True,
+                        color=colors[2])
+            ax[3, 0].set_title(r'Blending Coefficient $\lambda$', fontsize=fontsize)
+            ax[3, 1].plot(model.lambdas_, c=colors[2])
+
+            x = model.lambdas_.ravel()[n_burn:]
+            lags, corr, _, _ = ax[3, 2].acorr(x - np.mean(x), maxlags=maxlags,
+                                              normed=True, usevlines=True,
+                                              alpha=0.5)
+            ax[3, 2].set_xlim((0, maxlags))
+            ax[3, 2].text(0.5, 0.9,
+                          'ESS = {:.2f}'.format(effective_n(x, lags, corr)),
+                          fontsize=8,
+                          horizontalalignment='left',
+                          verticalalignment='center',
+                          transform=ax[3, 2].transAxes)
+        else:
+            sns.kdeplot(model.lambdas_[n_burn:].ravel(), ax=ax[2, 0], shade=True,
+                        color=colors[2])
+            ax[2, 0].set_title(r'Blending Coefficient $\lambda$', fontsize=fontsize)
+            ax[2, 1].plot(model.lambdas_, c=colors[2])
+
+            x = model.lambdas_.ravel()[n_burn:]
+            lags, corr, _, _ = ax[2, 2].acorr(x - np.mean(x), maxlags=maxlags,
+                                              normed=True, usevlines=True,
+                                              alpha=0.5)
+            ax[2, 2].set_xlim((0, maxlags))
+            ax[2, 2].text(0.5, 0.9,
+                          'ESS = {:.2f}'.format(effective_n(x, lags, corr)),
+                          fontsize=8,
+                          horizontalalignment='left',
+                          verticalalignment='center',
+                          transform=ax[2, 2].transAxes)
 
     return fig, ax
 
