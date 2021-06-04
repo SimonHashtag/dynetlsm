@@ -326,7 +326,7 @@ def plot_traces_hdp_lpcm(model, figsize=(10, 12), maxlags=100, fontsize=8):
     if model.is_directed:
         sns.kdeplot(model.intercepts_[n_burn:, 0].ravel(), ax=ax[1, 0],
                     shade=True, color=colors[1])
-        ax[1, 0].set_title(r'Intercept $\beta_{in}$', fontsize=fontsize)
+        ax[1, 0].set_title(r'Intercept $\omega_{in}$', fontsize=fontsize)
         ax[1, 1].plot(model.intercepts_[:, 0], c=colors[1])
 
         x = model.intercepts_[n_burn:, 0].ravel()
@@ -343,7 +343,7 @@ def plot_traces_hdp_lpcm(model, figsize=(10, 12), maxlags=100, fontsize=8):
 
         sns.kdeplot(model.intercepts_[n_burn:, 1].ravel(), ax=ax[2, 0],
                     shade=True, color=colors[2])
-        ax[2, 0].set_title(r'Intercept $\beta_{out}$', fontsize=fontsize)
+        ax[2, 0].set_title(r'Intercept $\omega_{out}$', fontsize=fontsize)
         ax[2, 1].plot(model.intercepts_[:, 1], c=colors[2])
 
         x = model.intercepts_[n_burn:, 1].ravel()
@@ -945,7 +945,7 @@ def transition_freqs(z0, z1, n_groups):
 
 
 def alluvial_plot(z, figsize=(10, 6), margin=0.01, rec_width=0.01, alpha=0.5,
-                  edgecolor='black', text_map=None):
+                  edgecolor='black', colors=None, text_map=None):
     fig, ax = plt.subplots(figsize=figsize)
 
     n_time_steps, n_nodes = z.shape
@@ -959,10 +959,11 @@ def alluvial_plot(z, figsize=(10, 6), margin=0.01, rec_width=0.01, alpha=0.5,
     z = encoder.transform(z.ravel()).reshape(n_time_steps, n_nodes)
     n_groups = encoder.classes_.shape[0]
 
-    if n_groups <= 20:
-        colors = get_color20()
-    else:
-        colors = sns.color_palette('husl', n_colors=n_groups)
+    if colors == None:
+        if n_groups <= 20:
+            colors = get_color20()
+        else:
+            colors = sns.color_palette('husl', n_colors=n_groups)
 
     # determine height of group partitions
     rec_heights = np.zeros((n_time_steps, n_groups, 2), dtype=np.float64)
@@ -1119,3 +1120,254 @@ def plot_adjacency_matrix(Y, z, figsize=(8, 6)):
     ax.set_ylim(0, Y.shape[0] - 0.5)
 
     return fig, ax
+
+def create_summaryplots(csv: str, figpath: str, yearstart: int = 1950,
+                        yearend: int = 2020, rolling=False):
+    """
+    Function that creates and stores figure of summary statistics of the network from csv.
+    Csv must contain supplier and recipient data in columns 0 and 1 and year delivered in column 2.
+    This holds true for SIPRI (2021) dataset.
+
+    Summary plot is inspired by:
+    Anders Akerman, Anna Larsson Seim (2014): The global arms trade network 1950-2007
+    Journal of Comparative Economics 42 (3), pp. 535-551
+
+    :param csv: A csv file that includes senders, receivers and year of a dynamic network
+    :param figpath: the path, in which produced figure is stored
+    :param yearstart: Default: 1950. Start of analysing period for summary plots
+    :param yearend: Default: 2020. End of analysing period for summary plots
+    :param rolling: Default: False. Create a rolling average for each 5 period time slot
+    :return: Stores .png-figure in figpath.
+    """
+    # Read csv-file
+    data = pd.read_csv(csv, sep=",", header=0, index_col=False, encoding='utf-8')
+    # Collect names of columns
+    columns = list(data.columns)
+    timeperiod = yearend - yearstart
+    # Select column holding the delivery year
+    time = columns[2]
+
+    # Extract columns supplier and recipient and year based on yearstart and yearend and sort it by year.
+    data = data.loc[(data[time] >= yearstart) & (data[time] <= yearend), [columns[0], columns[1], time]].sort_values(
+        by=time)
+    graph = []  # Create empty list for graph data
+    # Create a digraph/directed network for each year in observation period and store it in list graph.
+    for index in range(timeperiod + 1):
+        year = data.loc[data[time] == yearstart + index, :]
+        G = nx.from_pandas_edgelist(year, columns[0], columns[1], create_using=nx.DiGraph())
+        graph.append(G.copy())
+    years = list(range(yearstart, yearend + 1))  # create a list containing each year in the observation period
+
+    undirectedGraph = []  # Create empty list for undirected graph data
+
+    # Create a graph/undirected network for five-year periods.
+    # The first period is computed twice as yearstart is approximated by the result in yearstart+4
+    year = data.loc[(data[time] >= yearstart) & (data[time] < yearstart + 5), :]  # First period of five-year slots
+    G = nx.from_pandas_edgelist(year, columns[0], columns[1], create_using=nx.Graph())
+    undirectedGraph.append(G.copy())
+    for index in range(timeperiod + 1):
+        if index % 5 == 0:
+            year = data.loc[(data[time] >= yearstart + index) & (data[time] < yearstart + index + 5),
+                   :]  # Store the network data of five-year period as year
+            G = nx.from_pandas_edgelist(year, columns[0], columns[1], create_using=nx.Graph())
+            undirectedGraph.append(G.copy())
+
+    diGraph = []  # Create empty list for directed graph data with five-year slots
+
+    # Create a digraph/directed network for five-year periods.
+    year = data.loc[(data[time] >= yearstart) & (data[time] < yearstart + 5), :]
+    G = nx.from_pandas_edgelist(year, columns[0], columns[1], create_using=nx.DiGraph())
+    diGraph.append(G.copy())
+    for index in range(timeperiod + 1):
+        if index % 5 == 0:
+            year = data.loc[(data[time] >= yearstart + index) & (data[time] < yearstart + index + 5), :]
+            G = nx.from_pandas_edgelist(year, columns[0], columns[1], create_using=nx.DiGraph())
+            diGraph.append(G.copy())
+
+    yearsFive = list(range(yearstart, yearend + 2))[
+                0::5]  # create a list containing every year fifth in the observation period
+
+    fig, axs = plt.subplots(4, 3)  # create a figure with 12 plots and save the figure layout and axes
+
+    # Draw a plot for the evolution of the sample size/order
+    order_values = pd.Series(map(len, diGraph))
+    if rolling:
+        # If required, the values can be smoothed via a moving average. This might prove useful, when using yearly data, as the data might be quite volatile
+        order_values = order_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsOrder = dict(zip(yearsFive, order_values))  # Create a dictionary with years and values
+    axs[0, 0].plot(list(DynamicsOrder.keys()), list(DynamicsOrder.values()))  # plot a time series
+    axs[0, 0].set_title('a.) Order of the network in ' + str(yearstart) + '-' + str(yearend))  # Set a title of the plot
+    axs[0, 0].set(ylabel='No. of nodes for 5 year periods')  # Mark ordinate
+
+    # Draw a plot for the evolution of the number of edges/size of the network
+    size_values = pd.Series(map(nx.Graph.size, diGraph))
+    if rolling:
+        size_values = size_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsSize = dict(zip(yearsFive, size_values))
+    axs[0, 1].set_title('b.) Size of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[0, 1].set(ylabel='No. of links for 5 year periods')
+    axs[0, 1].plot(list(DynamicsSize.keys()), list(DynamicsSize.values()))
+
+    # Draw a plot for the evolution of the density
+    density_values = pd.Series(map(nx.density, diGraph))
+    if rolling:
+        density_values = density_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsDensity = dict(zip(yearsFive, density_values))
+    axs[1, 0].set_title('d.) Density of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[1, 0].set(ylabel='Density for 5 year periods')
+    axs[1, 0].plot(list(DynamicsDensity.keys()), list(DynamicsDensity.values()))
+
+    # Draw a plot for the evolution of the diameter
+    diameter_values = pd.Series(map(nx.diameter, undirectedGraph))
+    if rolling:
+        diameter_values = diameter_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsDiameter = dict(zip(yearsFive, diameter_values))
+    axs[1, 1].set_title('e.) Diameter of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[1, 1].set(ylabel='Diameter for 5 year periods')
+    axs[1, 1].plot(list(DynamicsDiameter.keys()), list(DynamicsDiameter.values()))
+
+    # Draw a plot for the evolution of the average clustering
+    clustering_values = pd.Series(map(nx.average_clustering, diGraph))
+    if rolling:
+        clustering_values = clustering_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsClust = dict(zip(yearsFive, clustering_values))
+    axs[3, 2].set_title('l.) Average Clustering of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[3, 2].set(ylabel='Clustering for 5 year periods')
+    axs[3, 2].plot(list(DynamicsClust.keys()), list(DynamicsClust.values()))
+
+    # Draw a plot for the evolution of the transitivity of the network
+    transitivity_values = pd.Series(map(nx.transitivity, diGraph))
+    if rolling:
+        transitivity_values = transitivity_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsTransitivity = dict(zip(yearsFive, transitivity_values))
+    axs[3, 1].set_title('k.) Transitivity of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[3, 1].set(ylabel='Transitivity for 5 year periods')
+    axs[3, 1].plot(list(DynamicsTransitivity.keys()), list(DynamicsTransitivity.values()))
+
+    # Draw a plot for the evolution of the assortativity of the network
+    assortativity_values = pd.Series(
+        map(nx.degree_pearson_correlation_coefficient, diGraph))
+    if rolling:
+        assortativity_values =  assortativity_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsAssortativity = dict(zip(yearsFive, assortativity_values))
+    axs[3, 0].set_title('j.) Assortativity of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[3, 0].set(ylabel='Assortativity for 5 year periods')
+    axs[3, 0].plot(list(DynamicsAssortativity.keys()), list(DynamicsAssortativity.values()))
+
+    # Draw a plot for the evolution of the degree centrality of the network
+    DCentrality_values = pd.Series(map(lambda g: sum(
+        [abs(x - max(nx.degree_centrality(g).values())) for x in list(nx.degree_centrality(g).values())]) / (
+                                                         (len(g) - 2) * (len(g) - 1)),
+                                       undirectedGraph))
+    if rolling:
+        DCentrality_values =  DCentrality_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsDCentrality = dict(zip(yearsFive, DCentrality_values))
+    axs[2, 0].set_title('g.) Degree centrality of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[2, 0].set(ylabel='Degree centrality for 5 year periods')
+    axs[2, 0].plot(list(DynamicsDCentrality.keys()), list(DynamicsDCentrality.values()))
+
+    # Draw a plot for the evolution of the closeness centrality of the network
+    CCentrality_values = pd.Series(map(lambda g: sum(
+        [abs(x - max(nx.closeness_centrality(g).values())) for x in list(nx.closeness_centrality(g).values())]) / (
+                                                         (len(g) - 2) * (len(g) - 1) * (2 * len(g) - 3)),
+                                       undirectedGraph))
+    if rolling:
+        CCentrality_values =  CCentrality_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsCCentrality = dict(zip(yearsFive, CCentrality_values))
+    axs[2, 1].set_title('h.) Closeness centrality of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[2, 1].set(ylabel='Closeness centrality for 5 year periods')
+    axs[2, 1].plot(list(DynamicsCCentrality.keys()), list(DynamicsCCentrality.values()))
+
+    # Draw a plot for the evolution of the betweenness centrality of the network
+    BCentrality_values = pd.Series(map(lambda g: sum(
+        [abs(x - max(nx.betweenness_centrality(g).values())) for x in list(nx.betweenness_centrality(g).values())]) / (
+                                                             (len(g) - 1) * (len(g) - 2) / 2),
+                                       undirectedGraph))
+    if rolling:
+        BCentrality_values =  BCentrality_values.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsBCentrality = dict(zip(yearsFive, BCentrality_values))
+    axs[2, 2].set_title('i.) Betweenness centrality of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[2, 2].set(ylabel='Betweenness centrality for 5 year periods')
+    axs[2, 2].plot(list(DynamicsBCentrality.keys()), list(DynamicsBCentrality.values()))
+
+    # Draw a plot for the evolution of the maximum degree of the network
+    maxDegree = pd.Series(
+        map(lambda g: max(list(dict(g.degree).values())), diGraph))
+    if rolling:
+        maxDegree =  maxDegree.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsmaxDegree = dict(zip(yearsFive, maxDegree))
+    axs[0, 2].set_title('c.) Max degree of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[0, 2].set(ylabel='Max degree for 5 year periods')
+    axs[0, 2].plot(list(DynamicsmaxDegree.keys()), list(DynamicsmaxDegree.values()))
+
+    # Draw a plot for the evolution of the average geodesic length of the network
+    aPathlen = pd.Series(map(lambda g: nx.average_shortest_path_length(g), undirectedGraph))
+    if rolling:
+        aPathlen =  aPathlen.rolling(5, min_periods=1).mean()#[0::5]
+    DynamicsaPathlen = dict(zip(yearsFive, aPathlen))
+    axs[1, 2].set_title('f.) Average path length of the network in ' + str(yearstart) + '-' + str(yearend))
+    axs[1, 2].set(ylabel='Av. path length for 5 year periods')
+    axs[1, 2].plot(list(DynamicsaPathlen.keys()), list(DynamicsaPathlen.values()))
+
+    # Mark the x-axes
+    for ax in axs.flat:
+        ax.set(xlabel='Years')
+    #fig.set_facecolor("#fef9e7")  # Set a background color
+    # Set borders, padding, size and show plot. Afterwards, save it in path figpath.
+    fig.tight_layout(pad=0.4, w_pad=0.4, h_pad=0.4)
+    fig.show()
+    fig.set_size_inches(10, 8)
+    plt.savefig(figpath + 'SummaryStats' + str(yearstart) + '-' + str(yearend) + '.png', dpi=300)
+
+def create_networkplots(csv: str, yearstart: int, yearend: int, figpath: str):
+    """
+    A function that creates visualizations of networks and a bar plot of the degree distribution for the observation period.
+    Csv must contain supplier and recipient data in columns 0 and 1 and year ordered and year delivered in columns 5 and 6.
+    This holds true for SIPRI (2021) dataset.
+    :param csv: A csv file that includes senders, receivers and year of a dynamic network
+    :param yearstart: Begin of observation period
+    :param yearend: End of observation period
+    :param figpath: Path, where figures are stored at.
+    """
+    # Read csv-file
+    data = pd.read_csv(csv, sep=",", header=0, index_col=False, encoding='utf-8')
+    columns = list(data.columns) # Collect names of columns
+    # Collect data from observation period
+    armsperiod = data.loc[(data[columns[2]] >= yearstart) & (data[columns[2]] <= yearend), [columns[0], columns[1]]]
+    # Create directed network
+    G = nx.from_pandas_edgelist(armsperiod, columns[0], columns[1], create_using=nx.DiGraph())
+    figNX = plt.figure() # Create figure for network visualization
+    # Set title of figure:
+    if yearstart==yearend:
+        plt.title('The Arms Trade Network in ' + str(yearstart))
+    else:
+        plt.title('The Arms Trade Network in ' + str(yearstart) + '-' + str(yearend))
+    d = dict(G.degree) # Store degrees of nodes in dictionary d. Later used to determine size of each node.
+    position = nx.spring_layout(G, k=1.5, pos=nx.kamada_kawai_layout(G)) # Determine position of nodes in figure.
+    # Draw the network with following specifications:
+    nx.draw_networkx(G, pos=position, arrowsize=10, with_labels=True, verticalalignment='bottom', node_size=[30 + v * 8 for v in d.values()], node_shape='.',
+                     alpha=0.8, linewidths=3, font_size=8, font_color="black", font_weight="bold", width=1, node_color= '#3498db', edge_color="grey")
+    #figNX.set_facecolor("#fef9e7") # Set background color of figure
+    figNX.show()
+    figNX.set_size_inches(12.8, 9.6) # Set size of figure
+    # Save figure in directory figpath with a resolution of 100 dpi:
+    if yearstart==yearend:
+        plt.savefig(figpath + 'network' + str(yearstart) + '.png', dpi=100)
+    else:
+        plt.savefig(figpath + 'network' + str(yearstart) + '-' + str(yearend) + '.png', dpi=100)
+
+    # Plot the degree distribution for the observation horizon:
+    figBar = plt.figure()
+    # len(Counter(list(d.values())))
+    hist = nx.degree_histogram(G) # Create a degree distribution of the network
+    plt.bar(range(0, len(hist)), hist, color='slategrey') # Plot the degree distribution
+    # Labeling of the figure:
+    plt.title('Degree Distribution in period ' + str(yearstart) + '-' + str(yearend))
+    plt.ylabel('Absolute frequency')
+    plt.xlabel('Degree')
+    figBar.show()
+    # Save figure in directory figpath:
+    if yearstart==yearend:
+        plt.savefig(figpath + 'degreedistr' + str(yearstart) + '.png')
+    else:
+        plt.savefig(figpath + 'degreedistr' + str(yearstart) + '-' + str(yearend) + '.png')
