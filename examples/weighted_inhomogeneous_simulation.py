@@ -17,7 +17,7 @@ from sklearn.utils import check_random_state
 from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
 
 from dynetlsm import DynamicNetworkHDPLPCM
-from dynetlsm.datasets import synthetic_dynamic_network
+from dynetlsm.datasets import synthetic_dynamic_network, synthetic_time_homogeneous_dynamic_network
 from dynetlsm.model_selection.approx_bic import calculate_cluster_counts
 from dynetlsm.metrics import variation_of_information, pseudo_R_squared
 from dynetlsm.network_statistics import density, modularity
@@ -52,7 +52,7 @@ def benchmark_single(n_iter=10000, burn=5000, tune=1000,
 
     # generate simulated networks
     Y, X, z, intercept, radii, nu, _, _ = synthetic_dynamic_network(
-        n_time_steps=9, n_nodes=120, is_directed=True,
+        n_time_steps=9, n_nodes=100, is_directed=True,
         is_weighted=True, lmbda=0.8, intercept=1.0,
         sticky_const=20, random_state=random_state)
 
@@ -154,23 +154,20 @@ def benchmark_single(n_iter=10000, burn=5000, tune=1000,
 
 
 # NOTE: This is meant to be run in parallel on a computer cluster!
-n_reps = 50
+n_reps = 30
 out_dir = 'results'
 
 # create a directory to store the results
 if not os.path.exists('results'):
     os.mkdir(out_dir)
 
-if os.path.exists('nu.csv'):
-    os.remove(os.path.join('nu.csv'))
-
 for i in range(n_reps):
-    benchmark_single(n_iter=35000, burn=10000, tune=5000, random_state=i,
+    benchmark_single(n_iter=50000, burn=40000, tune=10000, random_state=i,
                      outfile_name=os.path.join(
-                        out_dir, 'benchmark_{}'.format(i)),
-                     nufile_name=os.path.join('nu'),
-                     iin_file_name=os.path.join('intercept_in'),
-                     iout_file_name=os.path.join('intercept_out'))
+                        out_dir, 'benchmark_large_{}'.format(i)),
+                     nufile_name=os.path.join('nu_large'),
+                     iin_file_name=os.path.join('intercept_in_large'),
+                     iout_file_name=os.path.join('intercept_out_large'))
 
 # calculate median metric values
 n_time_steps = 9
@@ -225,7 +222,7 @@ g = sns.catplot(x='cluster_number', y='probas', col='t',
 
 for ax in g.axes:
     ax.set_ylabel('posterior probability')
-    ax.set_xlabel('# of groups')
+    ax.set_xlabel('# of clusters')
 
 g.fig.tight_layout()
 
@@ -246,7 +243,7 @@ data = pd.DataFrame(data,
 mask = data.values == 0
 
 g = sns.heatmap(data, annot=True, cmap="Blues", cbar=False, mask=mask)
-g.set_xlabel('# of groups')
+g.set_xlabel('# of clusters')
 g.set_ylabel('t')
 plt.savefig('num_clusters.png', dpi=300)
 
@@ -254,25 +251,51 @@ plt.savefig('num_clusters.png', dpi=300)
 plt.clf()
 
 # plot posterior distributions of nu^2
-nu = pd.read_csv(os.path.join('nu.csv'))
+nu = pd.read_csv(os.path.join('nu_large.csv'))
 g = sns.kdeplot(data=nu, shade=False, legend=False)
 g.axvline(4, 0, 1, color='black', lw=2, ls='--')
-plt.savefig('nu_distribution.png', dpi=300)
+plt.savefig('nu_distribution_l.png', dpi=300)
 
 # clear figure
 plt.clf()
 
 # plot posterior distributions of nu^2
-iin = pd.read_csv(os.path.join('intercept_in.csv'))
+iin = pd.read_csv(os.path.join('intercept_in_large.csv'))
 g = sns.kdeplot(data=iin, shade=False, legend=False)
 g.axvline(3, 0, 1, color='black', lw=2, ls='--')
-plt.savefig('intercept_in_distribution.png', dpi=300)
+plt.savefig('intercept_in_distribution_l.png', dpi=300)
 
 # clear figure
 plt.clf()
 
 # plot posterior distributions of nu^2
-iout = pd.read_csv(os.path.join('intercept_out.csv'))
+iout = pd.read_csv(os.path.join('intercept_out_large.csv'))
 g = sns.kdeplot(data=iout, shade=False, legend=False)
 g.axvline(1, 0, 1, color='black', lw=2, ls='--')
-plt.savefig('intercept_out_distribution.png', dpi=300)
+plt.savefig('intercept_out_distribution_l.png', dpi=300)
+
+# clear figure
+plt.clf()
+
+# Check for multicollinearity
+
+iout = pd.read_csv(os.path.join('intercept_out.csv'))
+iin = pd.read_csv(os.path.join('intercept_in.csv'))
+
+sum = []
+for i in range(iout.shape[1]):
+    plus = iin.iloc[:,i].values + iout.iloc[:,i].values
+    sum.append(plus)
+sum = pd.DataFrame(sum).transpose()
+g = sns.kdeplot(data=sum, shade=False, legend=False)
+g.axvline(4, 0, 1, color='black', lw=2, ls='--')
+plt.savefig('Sum1.png', dpi=300)
+
+# clear figure
+plt.clf()
+
+iout = iout.stack().reset_index(drop=True)
+iin = iin.stack().reset_index(drop=True)
+
+corr = iin.corr(iout)
+print('The correlation between both intercept variables is:', corr)
