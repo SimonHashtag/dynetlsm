@@ -264,6 +264,7 @@ def plot_traces_lsm(model, figsize=(10, 6), maxlags=100, fontsize=8):
                       horizontalalignment='left',
                       verticalalignment='center',
                       transform=ax[1, 2].transAxes)
+    return fig, ax
 
 
 def plot_traces_hdp_lpcm(model, figsize=(10, 12), maxlags=100, fontsize=8):
@@ -1317,7 +1318,7 @@ def create_summaryplots(csv: str, figpath: str, yearstart: int = 1950,
     fig.tight_layout(pad=0.4, w_pad=0.4, h_pad=0.4)
     fig.show()
     fig.set_size_inches(10, 8)
-    plt.savefig(figpath + 'SummaryStats' + str(yearstart) + '-' + str(yearend) + '.png', dpi=300)
+    plt.savefig(figpath + '\\SummaryStats' + str(yearstart) + '-' + str(yearend) + '.png', dpi=300)
 
 def create_networkplots(csv: str, yearstart: int, yearend: int, figpath: str):
     """
@@ -1336,25 +1337,38 @@ def create_networkplots(csv: str, yearstart: int, yearend: int, figpath: str):
     armsperiod = data.loc[(data[columns[2]] >= yearstart) & (data[columns[2]] <= yearend), [columns[0], columns[1]]]
     # Create directed network
     G = nx.from_pandas_edgelist(armsperiod, columns[0], columns[1], create_using=nx.DiGraph())
-    figNX = plt.figure() # Create figure for network visualization
+    figNX = plt.figure()  # Create figure for network visualization
     # Set title of figure:
-    if yearstart==yearend:
+    if yearstart == yearend:
         plt.title('The Arms Trade Network in ' + str(yearstart))
     else:
         plt.title('The Arms Trade Network in ' + str(yearstart) + '-' + str(yearend))
     d = dict(G.degree) # Store degrees of nodes in dictionary d. Later used to determine size of each node.
     position = nx.spring_layout(G, k=1.5, pos=nx.kamada_kawai_layout(G)) # Determine position of nodes in figure.
     # Draw the network with following specifications:
-    nx.draw_networkx(G, pos=position, arrowsize=10, with_labels=True, verticalalignment='bottom', node_size=[30 + v * 8 for v in d.values()], node_shape='.',
-                     alpha=0.8, linewidths=3, font_size=8, font_color="black", font_weight="bold", width=1, node_color= '#3498db', edge_color="grey")
+    nx.draw_networkx(G,
+                     pos=position,
+                     arrowsize=10,
+                     with_labels=True,
+                     verticalalignment='bottom',
+                     node_size=[30 + v * 8 for v in d.values()],
+                     node_shape='.',
+                     alpha=0.8,
+                     linewidths=3,
+                     font_size=8,
+                     font_color="black",
+                     font_weight="bold",
+                     width=1,
+                     node_color='#3498db',
+                     edge_color="grey")
     #figNX.set_facecolor("#fef9e7") # Set background color of figure
     figNX.show()
     figNX.set_size_inches(12.8, 9.6) # Set size of figure
     # Save figure in directory figpath with a resolution of 100 dpi:
     if yearstart==yearend:
-        plt.savefig(figpath + 'network' + str(yearstart) + '.png', dpi=100)
+        plt.savefig(figpath + '\\network' + str(yearstart) + '.png', dpi=100)
     else:
-        plt.savefig(figpath + 'network' + str(yearstart) + '-' + str(yearend) + '.png', dpi=100)
+        plt.savefig(figpath + '\\network' + str(yearstart) + '-' + str(yearend) + '.png', dpi=100)
 
     # Plot the degree distribution for the observation horizon:
     figBar = plt.figure()
@@ -1368,6 +1382,6 @@ def create_networkplots(csv: str, yearstart: int, yearend: int, figpath: str):
     figBar.show()
     # Save figure in directory figpath:
     if yearstart==yearend:
-        plt.savefig(figpath + 'degreedistr' + str(yearstart) + '.png')
+        plt.savefig(figpath + '\\degreedistr' + str(yearstart) + '.png')
     else:
-        plt.savefig(figpath + 'degreedistr' + str(yearstart) + '-' + str(yearend) + '.png')
+        plt.savefig(figpath + '\\degreedistr' + str(yearstart) + '-' + str(yearend) + '.png')

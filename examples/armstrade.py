@@ -20,8 +20,8 @@ import pandas as pd
 # Specification of directories and paths
 currentPath = dirname(__file__)
 datapath = abspath(join(currentPath, '..', 'dynetlsm', 'datasets', 'raw_data', 'armstrade'))
-figpath = abspath(join(currentPath, 'armstrade'))
-modelpath = 'D:\Dokumente\Studium\Masterarbeit'
+figpath = abspath(join(currentPath, '..', 'images', 'armstrade'))
+#modelpath = 'D:\Dokumente\Studium\Masterarbeit'
 
 # Specification of color palettes
 # colors2 = ["#08D63D", "black", "purple", "black", "#FF5733", "black", "#ff0000", "#0847D6", "#FFC300", "black"]
@@ -34,7 +34,6 @@ colorslarge = ["#FFC300", "#00A300", "#fa6d6d", "#73a8f4"]
 importData(filename='armstrade1950_2020.csv', weighted=True, dropcountry=True)
 L, names = loadDeals()
 
-
  # 1. Compute new model and dump it in an object file in datapath
 model = DynamicNetworkHDPLPCM(n_iter=30000,
                               tune=10000,
@@ -46,6 +45,14 @@ model = DynamicNetworkHDPLPCM(n_iter=30000,
                               is_directed=True,
                               is_weighted=True).fit(L)
 
+# model = DynamicNetworkLSM(n_iter=1000,
+#                           n_features=2,
+#                           tune=1000,
+#                           burn=1000,
+#                           is_directed=True,
+#                           is_weighted=True,
+#                           random_state=42).fit(L)
+
 #
 # modelStorage = open(join(modelpath, 'model.obj'), 'wb')
 # pickle.dump(model, modelStorage)
@@ -54,18 +61,18 @@ model = DynamicNetworkHDPLPCM(n_iter=30000,
 # modelStorage = open(join(modelpath, 'modellarge.obj'), 'rb')
 # model = pickle.load(modelStorage)
 
-#Summary plots similar to Akerman & Seim (2014)
+# Summary plots similar to Akerman & Seim (2014)
 create_summaryplots(csv=join(datapath, 'cleanarmstrade1950_2020.csv'), figpath=figpath, rolling=False)
 
 # Network plots without clustering
 create_networkplots(csv=join(datapath, 'cleanarmstrade1950_2020.csv'), yearstart=1950, yearend=1954, figpath=figpath)
 create_networkplots(csv=join(datapath, 'cleanarmstrade1950_2020.csv'), yearstart=2015, yearend=2019, figpath=figpath)
 
-# # Trace plots
+# Trace plots
 fig, ax = plot_traces(model, figsize=(10, 15))
 fig.savefig(join(figpath, 'armstrade_no_clusters.png'), dpi=300)
 
-# alluvial diagram
+# Alluvial diagram
 fig, ax = alluvial_plot(model.z_, colors=colorslarge, figsize=(10, 5))
 fig.savefig(join(figpath, 'armstrade_alluvial.png'), dpi=300)
 
@@ -73,7 +80,7 @@ fig.savefig(join(figpath, 'armstrade_alluvial.png'), dpi=300)
 fig, ax = plot_adjacency_matrix(L[0,:,:], model.z_[0,:])
 fig.savefig(join(figpath, 'armstrade_adjacency.png'), dpi=300)
 
-# #latent space visualizations
+# latent space visualizations
 
 for t in range(L.shape[0]):
     fig, ax = plot_latent_space(
