@@ -31,13 +31,13 @@ colorslarge = ["#FFC300", "#00A300", "#fa6d6d", "#73a8f4"]
 
 # green: #08D63D; dark green: #00A300; orange: #FF5733; light red: #fa6d6d, light blue: #73a8f4, yellow: #FFC300
 
-importData(filename='armstrade1950_2020.csv', weighted=True, dropcountry=True)
+#importData(filename='armstrade1950_2020.csv', weighted=True, dropcountry=True)
 L, names = loadDeals()
 
  # 1. Compute new model and dump it in an object file in datapath
-model = DynamicNetworkHDPLPCM(n_iter=30000,
-                              tune=10000,
-                              burn=20000,
+model = DynamicNetworkHDPLPCM(n_iter=10000,
+                              tune=5000,
+                              burn=5000,
                               tune_interval=1000,
                               random_state=42,
                               n_components=10,

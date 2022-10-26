@@ -129,7 +129,8 @@ def select_bic(model):
                 loglik_k = dynamic_network_loglikelihood_directed_weighted(model.Y_fit_, X,
                                                                            intercept_in=intercept[0],
                                                                            intercept_out=intercept[1],
-                                                                           radii=radii,
+                                                                           radii_in=radii[0],
+                                                                           radii_out=radii[1],
                                                                            nu=nu)
                 bic_k = -2 * loglik_k
 

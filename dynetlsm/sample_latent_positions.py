@@ -108,7 +108,8 @@ def sample_latent_positions(Y, X, intercept, tau_sq, sigma_sq, samplers,
                                              'supported for non-weighted directed networks.')
                         else:
                             loglik = directed_weighted_partial_loglikelihood(Y[t], X[t],
-                                                                             radii=radii,
+                                                                             radii_in=radii[0],
+                                                                             radii_out=radii[1],
                                                                              intercept_in=intercept[0],
                                                                              intercept_out=intercept[1],
                                                                              nu=nu,
@@ -186,7 +187,8 @@ def sample_latent_positions_mixture(Y, X, intercept, mu, sigma, lmbda, z,
                                              'supported for non-weighted directed networks.')
                         else:
                             loglik = directed_weighted_partial_loglikelihood(Y[t], X[t],
-                                                                             radii=radii,
+                                                                             radii_in=radii[0],
+                                                                             radii_out=radii[1],
                                                                              intercept_in=intercept[0],
                                                                              intercept_out=intercept[1],
                                                                              nu=nu,

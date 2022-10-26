@@ -24,7 +24,8 @@ cdef inline double expit(double z):
 
 def directed_weighted_intercept_grad(DOUBLE[:, :, :] Y,
                                      DOUBLE[:, :, :] dist,
-                                     DOUBLE[:] radii,
+                                     DOUBLE[:] radii_in,
+                                     DOUBLE[:] radii_out,
                                      double intercept_in,
                                      double intercept_out,
                                      double nu):
@@ -39,8 +40,8 @@ def directed_weighted_intercept_grad(DOUBLE[:, :, :] Y,
         for i in range(n_nodes):
             for j in range(n_nodes):
                 if i != j:
-                    d_in = (1 - dist[t, i, j] / radii[j])
-                    d_out = (1 - dist[t, i, j] / radii[i])
+                    d_in = (1 - dist[t, i, j] / radii_in[j])
+                    d_out = (1 - dist[t, i, j] / radii_out[i])
                     eta = intercept_in * d_in + intercept_out * d_out
                     if Y[t, i, j] > 0:
                         step = (Y[t, i, j] - eta)/nu
@@ -56,7 +57,8 @@ def directed_weighted_intercept_grad(DOUBLE[:, :, :] Y,
 
 def directed_weighted_partial_loglikelihood(DOUBLE[:, ::1] Y,
                                             DOUBLE[:, ::1] X,
-                                            DOUBLE[:] radii,
+                                            DOUBLE[:] radii_in,
+                                            DOUBLE[:] radii_out,
                                             double intercept_in,
                                             double intercept_out,
                                             double nu,
@@ -81,14 +83,14 @@ def directed_weighted_partial_loglikelihood(DOUBLE[:, ::1] Y,
                 dist = sqrt(dist)
 
             # Y_ijt
-            eta = intercept_in * (1 - dist / radii[j]) + intercept_out * (1 - dist / radii[node_id])
+            eta = intercept_in * (1 - dist / radii_in[j]) + intercept_out * (1 - dist / radii_out[node_id])
             if Y[node_id, j] > 0:
                 loglik -= (log(std) + ((Y[node_id, j] - eta)**2 / (2*nu)))
             else:
                 loglik += log(1 - expit(1.702*eta/std))
 
             # Y_jit
-            eta = intercept_in * (1 - dist / radii[node_id]) + intercept_out * (1 - dist / radii[j])
+            eta = intercept_in * (1 - dist / radii_in[node_id]) + intercept_out * (1 - dist / radii_out[j])
             if Y[j, node_id] > 0:
                 loglik -=  (log(std) + ((Y[j, node_id] - eta)**2 / (2*nu)))
             else:
@@ -99,7 +101,8 @@ def directed_weighted_partial_loglikelihood(DOUBLE[:, ::1] Y,
 
 def directed_weighted_network_loglikelihood_fast(DOUBLE[:, :, ::1] Y,
                                                  DOUBLE[:, :, ::1] dist,
-                                                 DOUBLE[:] radii,
+                                                 DOUBLE[:] radii_in,
+                                                 DOUBLE[:] radii_out,
                                                  double intercept_in,
                                                  double intercept_out,
                                                  double nu):
@@ -114,8 +117,8 @@ def directed_weighted_network_loglikelihood_fast(DOUBLE[:, :, ::1] Y,
         for i in range(n_nodes):
             for j in range(n_nodes):
                 if i != j:
-                    d_in = (1 - dist[t, i, j] / radii[j])
-                    d_out = (1 - dist[t, i, j] / radii[i])
+                    d_in = (1 - dist[t, i, j] / radii_in[j])
+                    d_out = (1 - dist[t, i, j] / radii_out[i])
                     eta = intercept_in * d_in + intercept_out * d_out
                     if Y[t, i, j] > 0:
                         loglik -= ((Y[t, i, j] - eta)**2) / (2*nu) + log(std)
@@ -126,7 +129,8 @@ def directed_weighted_network_loglikelihood_fast(DOUBLE[:, :, ::1] Y,
 
 
 def directed_weighted_network_ystar(DOUBLE[:, :, :] dist,
-                                     DOUBLE[:] radii,
+                                     DOUBLE[:] radii_in,
+                                     DOUBLE[:] radii_out,
                                      double intercept_in,
                                      double intercept_out):
     cdef int i, j, t = 0
@@ -140,8 +144,8 @@ def directed_weighted_network_ystar(DOUBLE[:, :, :] dist,
         for i in range(n_nodes):
             for j in range(n_nodes):
                 if i != j:
-                    d_in = (1 - dist[t, i, j] / radii[j])
-                    d_out = (1 - dist[t, i, j] / radii[i])
+                    d_in = (1 - dist[t, i, j] / radii_in[j])
+                    d_out = (1 - dist[t, i, j] / radii_out[i])
                     eta[t, i, j] = intercept_in * d_in + intercept_out * d_out
                     #Y_star[t, i, j] = eta + random_normal(rng, loc, std)
 

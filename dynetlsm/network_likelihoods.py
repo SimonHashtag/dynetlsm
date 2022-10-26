@@ -42,11 +42,12 @@ def dynamic_network_loglikelihood_undirected(Y, X, intercept, squared=False,
 
 # TODO: mask nan entries
 def dynamic_network_loglikelihood_directed_weighted(Y, X,
-                                                    intercept_in, intercept_out, radii,
+                                                    intercept_in, intercept_out,
+                                                    radii_in, radii_out,
                                                     nu, squared=False, dist=None):
     dist = calculate_distances(X, squared=squared) if dist is None else dist
 
-    return directed_weighted_network_loglikelihood_fast(Y, dist, radii, intercept_in, intercept_out, nu)
+    return directed_weighted_network_loglikelihood_fast(Y, dist, radii_in, radii_out, intercept_in, intercept_out, nu)
 
 
 # TODO: mask nan entries
@@ -78,7 +79,9 @@ def dynamic_network_loglikelihood(model, sample_id, dist=None):
                     model.Y_fit_, X,
                     intercept_in=intercept[0],
                     intercept_out=intercept[1],
-                    radii=radii, nu=nu, dist=dist)
+                    radii_in=radii[0],
+                    radii_out=radii[1],
+                    nu=nu, dist=dist)
         else:
             loglik = dynamic_network_loglikelihood_undirected_weighted(
                 model.Y_fit_, X, intercept=intercept, nu=nu, dist=dist)

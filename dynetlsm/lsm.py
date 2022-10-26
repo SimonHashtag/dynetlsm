@@ -115,14 +115,16 @@ def directed_intercept_mle(Y, X, radii, nu=None, is_weighted=False, intercept_in
             return -dynamic_network_loglikelihood_directed_weighted(Y, X,
                                                                     intercept_in,
                                                                     intercept_out,
-                                                                    radii=radii,
+                                                                    radii_in=radii[0],
+                                                                    radii_out=radii[1],
                                                                     nu=nu,
                                                                     squared=squared,
                                                                     dist=dist)
 
         def grad(x):
             intercept_in, intercept_out = x[0], x[1]
-            return -directed_weighted_intercept_grad(Y, dist=dist, radii=radii,
+            return -directed_weighted_intercept_grad(Y, dist=dist,
+                                                     radii_in=radii[0], radii_out=radii[1],
                                                      intercept_in=intercept_in,
                                                      intercept_out=intercept_out,
                                                      nu=nu)
@@ -444,7 +446,10 @@ class DynamicNetworkLSM(object):
             self.intercepts_ = np.zeros((self.n_iter, 2), dtype=np.float64)
 
             # radii
-            self.radiis_ = np.zeros((self.n_iter, n_nodes), dtype=np.float64)
+            if self.is_weighted:
+                self.radiis_ = np.zeros((self.n_iter, 2, n_nodes), dtype=np.float64)
+            else:
+                self.radiis_ = np.zeros((self.n_iter, n_nodes), dtype=np.float64)
         else:
             self.intercepts_ = np.zeros((self.n_iter, 1), dtype=np.float64)
 
@@ -461,7 +466,7 @@ class DynamicNetworkLSM(object):
         if self.is_weighted:
             if self.is_directed:
                 # initialize radii
-                radii = initialize_radii(self.Y_fit_)
+                radii = [initialize_radii(self.Y_fit_) for _ in range(2)]
                 # initialize nu_sq (for initialization error term is assumed to be standard gaussian distributed -> nu_sq=1)
                 nu = 1.
                 # initialize intercept
@@ -576,9 +581,15 @@ class DynamicNetworkLSM(object):
                            proposal_type='random_walk')]
 
         if self.is_directed:
-            self.radii_sampler = Metropolis(step_size=self.step_size_radii,
-                                            tune=None,
-                                            proposal_type='dirichlet')
+            if self.is_weighted:
+                self.radii_samplers = [Metropolis(step_size=self.step_size_radii,
+                                                  tune=None,
+                                                  proposal_type='dirichlet') for
+                                       _ in range(2)]
+            else:
+                self.radii_samplers = [Metropolis(step_size=self.step_size_radii,
+                                                  tune=None,
+                                                  proposal_type='dirichlet')]
         if self.is_weighted:
             self.nu_sampler = Metropolis(step_size=self.step_size_nu, tune=self.tune,
                                          proposal_type='lognormal')
@@ -634,7 +645,7 @@ class DynamicNetworkLSM(object):
             if self.is_directed:
                 radii = sample_radii(
                             self.Y_fit_, X, intercepts=intercept, radii=radii,
-                            sampler=self.radii_sampler, nu=nu, dist=dist,
+                            samplers=self.radii_samplers, nu=nu, dist=dist,
                             is_weighted=self.is_weighted,
                             case_control_sampler=self.case_control_sampler_,
                             squared=False, random_state=rng)
@@ -730,7 +741,8 @@ class DynamicNetworkLSM(object):
                         Y, X,
                         intercept_in=intercept[0],
                         intercept_out=intercept[1],
-                        radii=radii,
+                        radii_in=radii[0],
+                        radii_out=radii[1],
                         nu=nu,
                         squared=False,
                         dist=dist)
@@ -786,7 +798,10 @@ class DynamicNetworkLSM(object):
             loglik -= 0.5 * (diff * diff) / self.intercept_variance_prior
 
         if self.is_directed:
-            loglik += stats.dirichlet.logpdf(radii, np.ones(n_nodes))
+            if self.is_weighted:
+                loglik += sum([stats.dirichlet.logpdf(radii[x], np.ones(n_nodes)) for x in range(2)])
+            else:
+                loglik += stats.dirichlet.logpdf(radii, np.ones(n_nodes))
 
         if self.is_weighted:
             loglik -= ((2 + self.delta) + 1) * np.log(nu) + ((1 + self.delta) * self.zeta_sq) / nu

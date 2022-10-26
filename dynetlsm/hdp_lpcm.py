@@ -107,8 +107,12 @@ def init_sampler(Y, is_directed=False, is_weighted=False,
 
     # radii
     if is_directed:
-        radiis = np.zeros((n_iter, n_nodes), dtype=np.float64)
-        radiis[0] = dynamic_emb.radii_
+        if is_weighted:
+            radiis = np.zeros((n_iter, 2, n_nodes), dtype=np.float64)
+            radiis[0] = dynamic_emb.radii_
+        else:
+            radiis = np.zeros((n_iter, n_nodes), dtype=np.float64)
+            radiis[0] = dynamic_emb.radii_
     else:
         radiis = None
 
@@ -561,21 +565,22 @@ class DynamicNetworkHDPLPCM(object):
         if self.tune is not None:
             self.n_iter += self.tune
 
-        (self.Xs_, self.intercepts_, self.mus_, self.sigmas_, self.zs_,
-         self.betas_, self.weights_, self.lambdas_,
-         self.radiis_, self.nus_, self.Y_fit_) = init_sampler(Y,
-                                                              is_directed=self.is_directed,
-                                                              is_weighted=self.is_weighted,
-                                                              n_iter=self.n_iter,
-                                                              n_features=self.n_features,
-                                                              n_components=self.n_components,
-                                                              lambda_init=self.lambda_prior,
-                                                              gamma=self.gamma,
-                                                              alpha=self.alpha,
-                                                              sample_missing=sample_missing,
-                                                              n_control=self.n_control,
-                                                              n_resample_control=self.n_resample_control,
-                                                              random_state=rng)
+        (self.Xs_, self.intercepts_, self.mus_,
+         self.sigmas_, self.zs_, self.betas_,
+         self.weights_, self.lambdas_, self.radiis_,
+         self.nus_, self.Y_fit_) = init_sampler(Y,
+                                                is_directed=self.is_directed,
+                                                is_weighted=self.is_weighted,
+                                                n_iter=self.n_iter,
+                                                n_features=self.n_features,
+                                                n_components=self.n_components,
+                                                lambda_init=self.lambda_prior,
+                                                gamma=self.gamma,
+                                                alpha=self.alpha,
+                                                sample_missing=sample_missing,
+                                                n_control=self.n_control,
+                                                n_resample_control=self.n_resample_control,
+                                                random_state=rng)
 
         if self.step_size_X == 'auto':
             self.step_size_X = 0.01 if self.is_directed else 0.1
@@ -618,9 +623,18 @@ class DynamicNetworkHDPLPCM(object):
                            proposal_type='random_walk')]
 
         if self.is_directed:
-            self.radii_sampler = Metropolis(step_size=self.step_size_radii,
-                                            tune=self.tune,
-                                            proposal_type='dirichlet')
+            if self.is_weighted:
+                self.radii_samplers = [
+                    Metropolis(step_size=self.step_size_radii,
+                                tune=self.tune,
+                                proposal_type='dirichlet') for
+                    _ in range(2)]
+            else:
+                self.radii_samplers = [
+                    Metropolis(step_size=self.step_size_radii,
+                               tune=self.tune,
+                               proposal_type='dirichlet')]
+
 
         if self.is_weighted:
             self.nu_sampler = Metropolis(step_size=self.step_size_nu,
@@ -771,7 +785,7 @@ class DynamicNetworkHDPLPCM(object):
             if self.is_directed:
                 radii = sample_radii(
                             self.Y_fit_, X, intercepts=intercept, radii=radii,
-                            sampler=self.radii_sampler, nu=nu, dist=dist,
+                            samplers=self.radii_samplers, nu=nu, dist=dist,
                             is_weighted=self.is_weighted,
                             case_control_sampler=self.case_control_sampler_,
                             squared=False, random_state=rng)
@@ -1148,7 +1162,8 @@ class DynamicNetworkHDPLPCM(object):
                     loglik += dynamic_network_loglikelihood_directed_weighted(self.Y_fit_, X,
                                                                               intercept_in=intercept[0],
                                                                               intercept_out=intercept[1],
-                                                                              radii=radii,
+                                                                              radii_in=radii[0],
+                                                                              radii_out=radii[1],
                                                                               nu=nu,
                                                                               squared=False,
                                                                               dist=dist)
@@ -1214,7 +1229,10 @@ class DynamicNetworkHDPLPCM(object):
 
         # constant dirichlet normalizing factor (should cache this...)
         if self.is_directed:
-            loglik += stats.dirichlet.logpdf(radii, np.ones(n_nodes))
+            if self.is_weighted:
+                loglik += sum([stats.dirichlet.logpdf(radii[x], np.ones(n_nodes)) for x in range(2)])
+            else:
+                loglik += stats.dirichlet.logpdf(radii, np.ones(n_nodes))
 
         if self.is_weighted:
             loglik -= ((2 + self.delta) + 1) * np.log(nu) + ((1 + self.delta) * self.zeta_sq) / nu

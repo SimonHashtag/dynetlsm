@@ -28,7 +28,7 @@ def sample_intercepts(Y, X, intercepts, intercept_prior,
                     loglik = dynamic_network_loglikelihood_directed_weighted(
                         Y, X,
                         intercept_in=x[0], intercept_out=intercepts[1],
-                        radii=radii,
+                        radii_in=radii[0], radii_out=radii[1],
                         nu=nu,
                         squared=squared,
                         dist=dist)
@@ -49,7 +49,7 @@ def sample_intercepts(Y, X, intercepts, intercept_prior,
                     loglik = dynamic_network_loglikelihood_directed_weighted(
                         Y, X,
                         intercept_in=intercepts[0], intercept_out=x[0],
-                        radii=radii,
+                        radii_in=radii[0], radii_out=radii[1],
                         nu=nu,
                         squared=squared,
                         dist=dist)
@@ -144,7 +144,7 @@ def sample_intercepts(Y, X, intercepts, intercept_prior,
     return intercepts
 
 
-def sample_radii(Y, X, intercepts, radii, sampler, nu=None, dist=None,
+def sample_radii(Y, X, intercepts, radii, samplers, nu=None, dist=None,
                  is_weighted=False, case_control_sampler=None, squared=False,
                  random_state=None):
     rng = check_random_state(random_state)
@@ -161,12 +161,37 @@ def sample_radii(Y, X, intercepts, radii, sampler, nu=None, dist=None,
                     Y, X,
                     intercept_in=intercepts[0],
                     intercept_out=intercepts[1],
-                    radii=x,
+                    radii_in=x,
+                    radii_out=radii[1],
                     nu=nu,
                     squared=squared,
                     dist=dist)
 
             return loglik
+
+        radii[0] = samplers[0].step(np.array(radii[0]), logp, rng)
+
+        def logp(x):
+            # NOTE: dirichlet prior (this is constant for alpha = 1.0)
+            if case_control_sampler:
+                # TODO: Loglikelihood for case_control_sampler in weighted case
+                raise ValueError('The case-control likelihood currently only '
+                                 'supported for non-weighted directed networks.')
+            else:
+                loglik = dynamic_network_loglikelihood_directed_weighted(
+                    Y, X,
+                    intercept_in=intercepts[0],
+                    intercept_out=intercepts[1],
+                    radii_in=radii[0],
+                    radii_out=x,
+                    nu=nu,
+                    squared=squared,
+                    dist=dist)
+
+            return loglik
+
+        radii[1] = samplers[1].step(np.array(radii[1]), logp, rng)
+
     else:
         def logp(x):
             # NOTE: dirichlet prior (this is constant for alpha = 1.0
@@ -194,7 +219,9 @@ def sample_radii(Y, X, intercepts, radii, sampler, nu=None, dist=None,
 
             return loglik
 
-    return sampler.step(radii, logp, rng)
+        radii = samplers[0].step(radii, logp, rng)
+
+    return radii
 
 def sample_nu(Y, X, delta, zeta_sq, intercepts, nu, sampler, radii=None, dist=None,
                  is_directed=False, case_control_sampler=None, squared=False, random_state=None):
@@ -213,7 +240,8 @@ def sample_nu(Y, X, delta, zeta_sq, intercepts, nu, sampler, radii=None, dist=No
                     Y, X,
                     intercept_in=intercepts[0],
                     intercept_out=intercepts[1],
-                    radii=radii,
+                    radii_in=radii[0],
+                    radii_out=radii[1],
                     nu=x,
                     squared=squared,
                     dist=dist)
