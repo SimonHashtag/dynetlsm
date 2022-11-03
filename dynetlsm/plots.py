@@ -921,6 +921,120 @@ def plot_latent_space_lpcm(model, t=0, estimate_type='best',
     return fig, ax
 
 
+def plot_latent_space_synthetic(Y, X, z, radii,
+                                is_directed=True,
+                                t=0,
+                                only_show_connected=True,
+                                figsize=(15, 15), border=0.1,
+                                linewidth=0.5,
+                                node_size=35,
+                                alpha=0.8, title_text='auto',
+                                show_edges=False,
+                                arrowstyle='-|>', connectionstyle='arc3,rad=0.2',
+                                mutation_scale=10,
+                                size_cutoff=1,
+                                mask_groups=None, use_radii=True,
+                                colors=None, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = None
+
+    if mask_groups is not None:
+        mask_groups = np.asarray(mask_groups)
+
+    if only_show_connected:
+        mask = connected_nodes(Y[t],
+                               is_directed=is_directed,
+                               size_cutoff=size_cutoff)
+    else:
+        mask = np.full(Y.shape[1], True)
+
+    encoder = LabelEncoder().fit(z.ravel())
+    colors = get_colors(z.ravel()) if colors is None else np.asarray(colors)
+
+    xy_min = np.min(X[t, mask], axis=0)
+    xy_max = np.max(X[t, mask], axis=0)
+
+    for ts in range(Y.shape[0]):
+        if only_show_connected:
+            mask_t = connected_nodes(Y[ts],
+                                     is_directed=is_directed,
+                                     size_cutoff=size_cutoff)
+        else:
+            mask_t = np.arange(Y.shape[1])
+
+        xy_min = np.minimum(xy_min, np.min(X[ts, mask_t], axis=0))
+        xy_max = np.maximum(xy_max, np.max(X[ts, mask_t], axis=0))
+
+    xy_min -= border
+    xy_max += border
+
+    ax.set_aspect('equal', 'box')
+    ax.axis('off')
+    ax.set_xlim(xy_min[0], xy_max[0])
+    ax.set_ylim(xy_min[1], xy_max[1])
+
+    if is_directed:
+        row, col = nondiag_indices_from(Y[t])
+    else:
+        row, col = np.triu_indices_from(Y[t])
+
+    if is_directed and use_radii:
+        sizes = 0.5 * radii[0] / radii[0].min() * node_size + 0.5 * radii[1] / radii[1].min() * node_size
+    else:
+        sizes = node_size
+
+    for i, j in zip(row, col):
+        if Y[t, i, j] > 0.0:
+            x1 = X[t, i]
+            x2 = X[t, j]
+
+            if not show_edges:
+                pass
+            elif is_directed and use_radii:
+                arrow_patch(x1, x2, sizes[i], sizes[j], ax,
+                            color=colors[encoder.transform([z[t, i]])[0]],
+                            alpha=alpha,
+                            connectionstyle=connectionstyle,
+                            linewidth=linewidth,
+                            mutation_scale=mutation_scale,
+                            arrowstyle=arrowstyle,
+                            zorder=1)
+            elif is_directed:
+                arrow_patch(x1, x2, sizes, sizes, ax,
+                            color=colors[encoder.transform([z[t, i]])[0]],
+                            alpha=alpha,
+                            connectionstyle=connectionstyle,
+                            linewidth=linewidth,
+                            mutation_scale=mutation_scale,
+                            arrowstyle=arrowstyle,
+                            zorder=1)
+            else:
+                arrow_patch(x1, x2, sizes, sizes, ax,
+                            color=colors[encoder.transform([z[t, i]])[0]],
+                            alpha=alpha,
+                            connectionstyle=connectionstyle,
+                            linewidth=linewidth,
+                            mutation_scale=mutation_scale,
+                            arrowstyle='-',
+                            zorder=1)
+
+    ax.scatter(x=X[t, :, 0], y=X[t, :, 1],
+               s=sizes,
+               c=colors[encoder.transform(z[t, :])],
+               alpha=alpha,
+               edgecolor='white',
+               zorder=2)
+
+    if title_text == 'auto':
+        ax.set_title('t = {}'.format(t + 1), size=18)
+    elif title_text:
+        ax.set_title(title_text)
+
+    return fig, ax
+
+
 def transition_freqs(z0, z1, n_groups):
     counts = np.zeros((n_groups, n_groups))
 

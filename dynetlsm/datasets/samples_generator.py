@@ -38,7 +38,7 @@ def network_from_dynamic_latent_space(X, intercept=1, coef=1,
     if nu is not None:
         if radii is not None:
             eta = directed_weighted_network_ystar(
-                dij, radii, intercept[0], intercept[1])
+                dij, radii[0], radii[1], intercept[0], intercept[1])
             Y_star = eta + rng.normal(loc=0.0, scale=np.sqrt(nu), size=(n_time_steps, n_nodes, n_nodes))
 
         for t in range(n_time_steps):
@@ -218,7 +218,7 @@ def simple_splitting_dynamic_network(n_nodes=120, n_time_steps=9,
     if is_directed:
         norms = 1. / np.linalg.norm(X[0], axis=1)
         norms /= np.max(norms)
-        radii = rng.dirichlet(n_nodes * norms)
+        radii = rng.dirichlet(n_nodes * norms, 2)
         intercept = np.array([0.3, 0.7])
     else:
         radii = None
@@ -347,8 +347,8 @@ def synthetic_dynamic_network(n_nodes=120, n_time_steps=9,
 
     # group spread
     if is_directed:
-        sigma_scale = 1e5
-        sigma_shape = 13
+        sigma_scale = 2e3
+        sigma_shape = 10
     sigmas = np.sqrt(1. / rng.gamma(shape=sigma_shape, scale=sigma_scale,
                                     size=n_groups_total))
 
@@ -535,7 +535,7 @@ def synthetic_dynamic_network(n_nodes=120, n_time_steps=9,
         if is_directed:
             norms = 1. / np.linalg.norm(X[0], axis=1)
             norms /= np.max(norms)
-            radii = rng.dirichlet(n_nodes * norms)
+            radii = rng.dirichlet(n_nodes * norms, 2)
             intercept = np.array([3, 1]) if np.shape(intercept) != (2,) else np.array(intercept)
         else:
             radii = None
@@ -637,7 +637,7 @@ def synthetic_time_homogeneous_dynamic_network(n_nodes=120, n_time_steps=9, n_gr
         if is_directed:
             norms = 1. / np.linalg.norm(X[0], axis=1)
             norms /= np.max(norms)
-            radii = rng.dirichlet(n_nodes * norms)
+            radii = rng.dirichlet(n_nodes * norms, 2)
             intercept = np.array([3, 1]) if np.shape(intercept) != (2,) else np.array(intercept)
         else:
             radii = None
@@ -695,7 +695,7 @@ def synthetic_clusterfree_dynamic_network(n_nodes=120, n_time_steps=9, n_groups=
         if is_directed:
             norms = 1. / np.linalg.norm(X[0], axis=1)
             norms /= np.max(norms)
-            radii = rng.dirichlet(n_nodes * norms)
+            radii = rng.dirichlet(n_nodes * norms, 2)
             intercept = np.array([3, 1]) if np.shape(intercept) != (2,) else np.array(intercept)
         else:
             radii = None

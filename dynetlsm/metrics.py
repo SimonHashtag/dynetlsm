@@ -55,8 +55,8 @@ def pseudo_R_squared(intercepts_mean, X_mean, radii_mean, nu_mean):
         for i in range(n_nodes):
             for j in range(n_nodes):
                 if i != j:
-                    y_squared += (intercepts_mean[0] * (1 - distances_mean[t,i,j]/radii_mean[j]) + intercepts_mean[1] * (1 - distances_mean[t,i,j]/radii_mean[i]))**2
-                    y += (intercepts_mean[0] * (1 - distances_mean[t,i,j]/radii_mean[j]) + intercepts_mean[1] * (1 - distances_mean[t,i,j]/radii_mean[i]))
+                    y_squared += (intercepts_mean[0] * (1 - distances_mean[t,i,j]/radii_mean[0, j]) + intercepts_mean[1] * (1 - distances_mean[t,i,j]/radii_mean[1, i]))**2
+                    y += (intercepts_mean[0] * (1 - distances_mean[t,i,j]/radii_mean[0, j]) + intercepts_mean[1] * (1 - distances_mean[t,i,j]/radii_mean[1, i]))
     y_bar = y / (n_time_steps*n_nodes*(n_nodes-1))
     numerator = y_squared - (n_time_steps*n_nodes*(n_nodes-1)) * y_bar**2
     denominator = numerator + n_time_steps * n_nodes * (n_nodes - 1) * nu_mean

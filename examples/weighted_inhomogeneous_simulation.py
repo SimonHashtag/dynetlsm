@@ -21,11 +21,12 @@ from dynetlsm.datasets import synthetic_dynamic_network, synthetic_time_homogene
 from dynetlsm.model_selection.approx_bic import calculate_cluster_counts
 from dynetlsm.metrics import variation_of_information, pseudo_R_squared
 from dynetlsm.network_statistics import density, modularity
+from dynetlsm.plots import plot_latent_space_synthetic
 
 
 def counts_per_time_step(z):
     n_time_steps = z.shape[0]
-    group_counts = np.zeros(n_time_steps, dtype=np.int)
+    group_counts = np.zeros(n_time_steps, dtype=int)
     for t in range(n_time_steps):
         group_counts[t] = np.unique(z[t]).shape[0]
 
@@ -46,6 +47,7 @@ def posterior_per_time_step(model):
 def benchmark_single(n_iter=10000, burn=5000, tune=1000,
                      outfile_name='benchmark', nufile_name=None,
                      iin_file_name=None, iout_file_name=None,
+                     radii_in_file_name=None, radii_out_file_name=None,
                      random_state=None):
     iteration = random_state
     random_state = check_random_state(random_state)
@@ -55,6 +57,10 @@ def benchmark_single(n_iter=10000, burn=5000, tune=1000,
         n_time_steps=9, n_nodes=100, is_directed=True,
         is_weighted=True, lmbda=0.8, intercept=1.0,
         sticky_const=20, random_state=random_state)
+
+    # for t in range(9):
+    #     fig, _ = plot_latent_space_synthetic(Y, X, z, radii, t=t, only_show_connected=False, show_edges=True)
+    #     fig.show()
 
     # fit HDP-LPCM
     model = DynamicNetworkHDPLPCM(n_iter=n_iter,
@@ -87,6 +93,20 @@ def benchmark_single(n_iter=10000, burn=5000, tune=1000,
     else:
         iout = pd.DataFrame(model.intercepts_[burn:, 1], columns=['intercept_out_{}'.format(iteration)])
     iout.to_csv(iout_file_name + '.csv', index=False)
+
+    if os.path.exists(radii_in_file_name + '.csv'):
+        radii_in = pd.read_csv(radii_in_file_name + '.csv')
+        radii_in['radii_in_{}'.format(iteration)] = model.radiis_[burn:, 0]
+    else:
+        radii_in = pd.DataFrame(model.radiis_[burn:, 0])
+    radii_in.to_csv(radii_in_file_name + '.csv', index=False)
+
+    if os.path.exists(radii_out_file_name + '.csv'):
+        radii_out = pd.read_csv(radii_out_file_name + '.csv')
+        radii_out['radii_out_{}'.format(iteration)] = model.radiis_[burn:, 1]
+    else:
+        radii_out = pd.DataFrame(model.radiis_[burn:, 1])
+    radii_out.to_csv(radii_out_file_name + '.csv', index=False)
 
     # MAP: number of clusters per time point
     map_counts = counts_per_time_step(model.z_)
@@ -154,20 +174,24 @@ def benchmark_single(n_iter=10000, burn=5000, tune=1000,
 
 
 # NOTE: This is meant to be run in parallel on a computer cluster!
-n_reps = 30
+n_reps = 1
 out_dir = 'results'
 
 # create a directory to store the results
 if not os.path.exists('results'):
     os.mkdir(out_dir)
+if not os.path.exists('results/benchmarks'):
+    os.mkdir(os.path.join(out_dir, 'benchmarks'))
 
 for i in range(n_reps):
-    benchmark_single(n_iter=50000, burn=40000, tune=10000, random_state=i,
+    benchmark_single(n_iter=100000, burn=80000, tune=20000, random_state=i,
                      outfile_name=os.path.join(
-                        out_dir, 'benchmark_large_{}'.format(i)),
-                     nufile_name=os.path.join('nu_large'),
-                     iin_file_name=os.path.join('intercept_in_large'),
-                     iout_file_name=os.path.join('intercept_out_large'))
+                        out_dir, 'benchmarks/benchmark_large_{}'.format(i)),
+                     nufile_name=os.path.join('results/nu_large'),
+                     iin_file_name=os.path.join('results/intercept_in_large'),
+                     iout_file_name=os.path.join('results/intercept_out_large'),
+                     radii_in_file_name=os.path.join('results/radii_in_large'),
+                     radii_out_file_name=os.path.join('results/radii_out_large'))
 
 # calculate median metric values
 n_time_steps = 9
@@ -177,7 +201,7 @@ n_files = len(glob.glob('results/*'))
 stat_names = ['pseudo_R_sq', 'vi_avg', 'vi_t1', 'vi_t2', 'vi_t3',
               'rand_avg', 'rand_t1', 'rand_t2', 'rand_t3', 'AMI_avg', 'AMI_t1', 'AMI_t2', 'AMI_t3']
 data = np.zeros((n_files, len(stat_names)))
-for i, file_name in enumerate(glob.glob('results/*')):
+for i, file_name in enumerate(glob.glob('results/benchmarks/*')):
     df = pd.read_csv(file_name)
     data[i] = df.loc[0, stat_names].values
 
@@ -206,7 +230,7 @@ plt.clf()
 
 # plot posterior boxplots
 data = {'probas': [], 'cluster_number': [], 't': []}
-for file_name in glob.glob('results/*'):
+for file_name in glob.glob('results/benchmarks/*'):
     df = pd.read_csv(file_name)
     for t in range(n_time_steps):
         for i in range(1, n_groups):
@@ -233,7 +257,7 @@ plt.clf()
 
 # plot selected number of groups for each simulation
 data = np.zeros((n_time_steps, n_groups), dtype=int)
-for sim_id, file_name in enumerate(glob.glob('results/*')):
+for sim_id, file_name in enumerate(glob.glob('results/benchmarks/*')):
     df = pd.read_csv(file_name)
     for t in range(n_time_steps):
         data[t, df.iloc[t, n_groups + 1] - 1] +=1
@@ -251,7 +275,7 @@ plt.savefig('num_clusters.png', dpi=300)
 plt.clf()
 
 # plot posterior distributions of nu^2
-nu = pd.read_csv(os.path.join('nu_large.csv'))
+nu = pd.read_csv(os.path.join('results/nu_large.csv'))
 g = sns.kdeplot(data=nu, shade=False, legend=False)
 g.axvline(4, 0, 1, color='black', lw=2, ls='--')
 plt.savefig('nu_distribution_l.png', dpi=300)
@@ -260,7 +284,7 @@ plt.savefig('nu_distribution_l.png', dpi=300)
 plt.clf()
 
 # plot posterior distributions of nu^2
-iin = pd.read_csv(os.path.join('intercept_in_large.csv'))
+iin = pd.read_csv(os.path.join('results/intercept_in_large.csv'))
 g = sns.kdeplot(data=iin, shade=False, legend=False)
 g.axvline(3, 0, 1, color='black', lw=2, ls='--')
 plt.savefig('intercept_in_distribution_l.png', dpi=300)
@@ -269,7 +293,7 @@ plt.savefig('intercept_in_distribution_l.png', dpi=300)
 plt.clf()
 
 # plot posterior distributions of nu^2
-iout = pd.read_csv(os.path.join('intercept_out_large.csv'))
+iout = pd.read_csv(os.path.join('results/intercept_out_large.csv'))
 g = sns.kdeplot(data=iout, shade=False, legend=False)
 g.axvline(1, 0, 1, color='black', lw=2, ls='--')
 plt.savefig('intercept_out_distribution_l.png', dpi=300)
@@ -279,8 +303,8 @@ plt.clf()
 
 # Check for multicollinearity
 
-iout = pd.read_csv(os.path.join('intercept_out.csv'))
-iin = pd.read_csv(os.path.join('intercept_in.csv'))
+iout = pd.read_csv(os.path.join('results/intercept_out_large.csv'))
+iin = pd.read_csv(os.path.join('results/intercept_in_large.csv'))
 
 sum = []
 for i in range(iout.shape[1]):
@@ -299,3 +323,11 @@ iin = iin.stack().reset_index(drop=True)
 
 corr = iin.corr(iout)
 print('The correlation between both intercept variables is:', corr)
+
+radii_out = pd.read_csv(os.path.join('results/radii_out_large.csv'))
+radii_in = pd.read_csv(os.path.join('results/radii_in_large.csv'))
+radii_out = radii_out.stack().reset_index(drop=True)
+radii_in = radii_in.stack().reset_index(drop=True)
+
+corr_radii = radii_in.corr(radii_out)
+print('The correlation between both radii distributions is:', corr_radii)

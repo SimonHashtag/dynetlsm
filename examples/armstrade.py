@@ -35,9 +35,9 @@ colorslarge = ["#FFC300", "#00A300", "#fa6d6d", "#73a8f4"]
 L, names = loadDeals()
 
  # 1. Compute new model and dump it in an object file in datapath
-model = DynamicNetworkHDPLPCM(n_iter=10000,
-                              tune=5000,
-                              burn=5000,
+model = DynamicNetworkHDPLPCM(n_iter=100000,
+                              tune=20000,
+                              burn=80000,
                               tune_interval=1000,
                               random_state=42,
                               n_components=10,
