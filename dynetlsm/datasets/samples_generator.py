@@ -347,8 +347,8 @@ def synthetic_dynamic_network(n_nodes=120, n_time_steps=9,
 
     # group spread
     if is_directed:
-        sigma_scale = 1e5
-        sigma_shape = 13
+        sigma_scale = 2e3
+        sigma_shape = 10
     sigmas = np.sqrt(1. / rng.gamma(shape=sigma_shape, scale=sigma_scale,
                                     size=n_groups_total))
 

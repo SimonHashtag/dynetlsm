@@ -13,6 +13,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from os.path import dirname, join, abspath
+
+from deco import concurrent, synchronized
 from sklearn.utils import check_random_state
 from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
 
@@ -25,7 +28,7 @@ from dynetlsm.network_statistics import density, modularity
 
 def counts_per_time_step(z):
     n_time_steps = z.shape[0]
-    group_counts = np.zeros(n_time_steps, dtype=np.int)
+    group_counts = np.zeros(n_time_steps, dtype=int)
     for t in range(n_time_steps):
         group_counts[t] = np.unique(z[t]).shape[0]
 
@@ -43,6 +46,7 @@ def posterior_per_time_step(model):
     return probas
 
 
+@concurrent
 def benchmark_single(n_iter=10000, burn=5000, tune=1000,
                      outfile_name='benchmark', nufile_name=None,
                      iin_file_name=None, iout_file_name=None,
@@ -153,149 +157,161 @@ def benchmark_single(n_iter=10000, burn=5000, tune=1000,
     results.to_csv(outfile_name + '.csv', index=False)
 
 
-# NOTE: This is meant to be run in parallel on a computer cluster!
-n_reps = 30
-out_dir = 'results'
+@synchronized
+def run_simulations(n_reps=30):
+    # NOTE: This is meant to be run in parallel on a computer cluster!
+    out_dir = 'results'
 
-# create a directory to store the results
-if not os.path.exists('results'):
-    os.mkdir(out_dir)
+    # create a directory to store the results
+    if not os.path.exists('results'):
+        os.mkdir(out_dir)
 
-for i in range(n_reps):
-    benchmark_single(n_iter=50000, burn=40000, tune=10000, random_state=i,
-                     outfile_name=os.path.join(
-                        out_dir, 'benchmark_large_{}'.format(i)),
-                     nufile_name=os.path.join('nu_large'),
-                     iin_file_name=os.path.join('intercept_in_large'),
-                     iout_file_name=os.path.join('intercept_out_large'))
+    if not os.path.exists('results/benchmarks'):
+        os.mkdir(os.path.join(out_dir, 'benchmarks'))
 
-# calculate median metric values
-n_time_steps = 9
-n_groups = 10
+    for i in range(n_reps):
+        benchmark_single(n_iter=50000, burn=40000, tune=10000, random_state=i,
+                         outfile_name=os.path.join(
+                            out_dir, 'benchmarks/benchmark_large_{}'.format(i)),
+                         nufile_name=os.path.join('results/nu_large'),
+                         iin_file_name=os.path.join('results/intercept_in_large'),
+                         iout_file_name=os.path.join('results/intercept_out_large'))
 
-n_files = len(glob.glob('results/*'))
-stat_names = ['pseudo_R_sq', 'vi_avg', 'vi_t1', 'vi_t2', 'vi_t3',
-              'rand_avg', 'rand_t1', 'rand_t2', 'rand_t3', 'AMI_avg', 'AMI_t1', 'AMI_t2', 'AMI_t3']
-data = np.zeros((n_files, len(stat_names)))
-for i, file_name in enumerate(glob.glob('results/*')):
-    df = pd.read_csv(file_name)
-    data[i] = df.loc[0, stat_names].values
 
-data = pd.DataFrame(data, columns=stat_names)
-print('Median Metrics:')
-print(data.median(axis=0))
-print('Metrics SD:')
-print(data.std(axis=0))
+def plot_simulations():
+    figpath = abspath(join(dirname(__file__), '..', 'images', 'simulation'))
 
-data = data[['pseudo_R_sq', 'rand_avg', 'rand_t1', 'rand_t2', 'rand_t3', 'AMI_avg', 'AMI_t1', 'AMI_t2', 'AMI_t3']]
-data.columns = ['Pseudo R^2', 'Avg. ARI', 'ARI (t = 1 - 3)', 'ARI (t = 4 - 6)',
-                'ARI (t = 7 - 9)', 'Avg. AMI', 'AMI (t = 1 - 3)', 'AMI (t = 4 - 6)', 'AMI (t = 7 - 9)']
+    # calculate median metric values
+    n_time_steps = 9
+    n_groups = 10
 
-# boxplots of the metrics
-plt.rc('font', family='sans-serif', size=24)
-fig, ax = plt.subplots(figsize=(10, 6))
-g = sns.boxplot(x='variable', y='value',
-                data=pd.melt(data), fliersize=2.0, ax=ax)
-g.tick_params(labelsize=8)
-sns.despine()
-ax.set(xlabel='', ylabel='')
-plt.savefig('performance_plot.png', dpi=300)
+    n_files = len(glob.glob('results/benchmarks/*'))
+    stat_names = ['pseudo_R_sq', 'vi_avg', 'vi_t1', 'vi_t2', 'vi_t3',
+                  'rand_avg', 'rand_t1', 'rand_t2', 'rand_t3', 'AMI_avg', 'AMI_t1', 'AMI_t2', 'AMI_t3']
+    data = np.zeros((n_files, len(stat_names)))
+    for i, file_name in enumerate(glob.glob('results/benchmarks/*')):
+        df = pd.read_csv(file_name)
+        data[i] = df.loc[0, stat_names].values
 
-# clear figure
-plt.clf()
+    data = pd.DataFrame(data, columns=stat_names)
+    print('Median Metrics:')
+    print(data.median(axis=0))
+    print('Metrics SD:')
+    print(data.std(axis=0))
 
-# plot posterior boxplots
-data = {'probas': [], 'cluster_number': [], 't': []}
-for file_name in glob.glob('results/*'):
-    df = pd.read_csv(file_name)
-    for t in range(n_time_steps):
-        for i in range(1, n_groups):
-            data['probas'].append(df.iloc[t, i])
-            data['cluster_number'].append(i)
-            data['t'].append(t + 1)
+    data = data[['pseudo_R_sq', 'rand_avg', 'rand_t1', 'rand_t2', 'rand_t3', 'AMI_avg', 'AMI_t1', 'AMI_t2', 'AMI_t3']]
+    data.columns = ['Pseudo R^2', 'Avg. ARI', 'ARI (t = 1 - 3)', 'ARI (t = 4 - 6)',
+                    'ARI (t = 7 - 9)', 'Avg. AMI', 'AMI (t = 1 - 3)', 'AMI (t = 4 - 6)', 'AMI (t = 7 - 9)']
 
-data = pd.DataFrame(data)
+    # boxplots of the metrics
+    plt.rc('font', family='sans-serif', size=24)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    g = sns.boxplot(x='variable', y='value',
+                    data=pd.melt(data), fliersize=2.0, ax=ax)
+    g.tick_params(labelsize=8)
+    sns.despine()
+    ax.set(xlabel='', ylabel='')
+    plt.savefig(join(figpath, 'performance_plot.png'), dpi=300)
 
-plt.rc('font', family='sans-serif', size=16)
-g = sns.catplot(x='cluster_number', y='probas', col='t',
-                col_wrap=3, kind='box', data=data)
+    # clear figure
+    plt.clf()
 
-for ax in g.axes:
-    ax.set_ylabel('posterior probability')
-    ax.set_xlabel('# of clusters')
+    # plot posterior boxplots
+    data = {'probas': [], 'cluster_number': [], 't': []}
+    for file_name in glob.glob('results/benchmarks/*'):
+        df = pd.read_csv(file_name)
+        for t in range(n_time_steps):
+            for i in range(1, n_groups):
+                data['probas'].append(df.iloc[t, i])
+                data['cluster_number'].append(i)
+                data['t'].append(t + 1)
 
-g.fig.tight_layout()
+    data = pd.DataFrame(data)
 
-plt.savefig('cluster_posterior.png', dpi=300)
+    plt.rc('font', family='sans-serif', size=16)
+    g = sns.catplot(x='cluster_number', y='probas', col='t',
+                    col_wrap=3, kind='box', data=data)
 
-# clear figure
-plt.clf()
+    for ax in g.axes:
+        ax.set_ylabel('posterior probability')
+        ax.set_xlabel('# of clusters')
 
-# plot selected number of groups for each simulation
-data = np.zeros((n_time_steps, n_groups), dtype=int)
-for sim_id, file_name in enumerate(glob.glob('results/*')):
-    df = pd.read_csv(file_name)
-    for t in range(n_time_steps):
-        data[t, df.iloc[t, n_groups + 1] - 1] +=1
+    g.fig.tight_layout()
 
-data = pd.DataFrame(data,
-    columns=range(1, n_groups + 1), index=range(1, n_time_steps + 1))
-mask = data.values == 0
+    plt.savefig(join(figpath, 'cluster_posterior.png'), dpi=300)
 
-g = sns.heatmap(data, annot=True, cmap="Blues", cbar=False, mask=mask)
-g.set_xlabel('# of clusters')
-g.set_ylabel('t')
-plt.savefig('num_clusters.png', dpi=300)
+    # clear figure
+    plt.clf()
 
-# clear figure
-plt.clf()
+    # plot selected number of groups for each simulation
+    data = np.zeros((n_time_steps, n_groups), dtype=int)
+    for sim_id, file_name in enumerate(glob.glob('results/benchmarks/*')):
+        df = pd.read_csv(file_name)
+        for t in range(n_time_steps):
+            data[t, df.iloc[t, n_groups + 1] - 1] +=1
 
-# plot posterior distributions of nu^2
-nu = pd.read_csv(os.path.join('nu_large.csv'))
-g = sns.kdeplot(data=nu, shade=False, legend=False)
-g.axvline(4, 0, 1, color='black', lw=2, ls='--')
-plt.savefig('nu_distribution_l.png', dpi=300)
+    data = pd.DataFrame(data,
+        columns=range(1, n_groups + 1), index=range(1, n_time_steps + 1))
+    mask = data.values == 0
 
-# clear figure
-plt.clf()
+    g = sns.heatmap(data, annot=True, cmap="Blues", cbar=False, mask=mask)
+    g.set_xlabel('# of clusters')
+    g.set_ylabel('t')
+    plt.savefig(join(figpath, 'num_clusters.png'), dpi=300)
 
-# plot posterior distributions of nu^2
-iin = pd.read_csv(os.path.join('intercept_in_large.csv'))
-g = sns.kdeplot(data=iin, shade=False, legend=False)
-g.axvline(3, 0, 1, color='black', lw=2, ls='--')
-plt.savefig('intercept_in_distribution_l.png', dpi=300)
+    # clear figure
+    plt.clf()
 
-# clear figure
-plt.clf()
+    # plot posterior distributions of nu^2
+    nu = pd.read_csv(os.path.join('results/nu_large.csv'))
+    g = sns.kdeplot(data=nu, shade=False, legend=False)
+    g.axvline(4, 0, 1, color='black', lw=2, ls='--')
+    plt.savefig(join(figpath, 'nu_distribution_l.png'), dpi=300)
 
-# plot posterior distributions of nu^2
-iout = pd.read_csv(os.path.join('intercept_out_large.csv'))
-g = sns.kdeplot(data=iout, shade=False, legend=False)
-g.axvline(1, 0, 1, color='black', lw=2, ls='--')
-plt.savefig('intercept_out_distribution_l.png', dpi=300)
+    # clear figure
+    plt.clf()
 
-# clear figure
-plt.clf()
+    # plot posterior distributions of nu^2
+    iin = pd.read_csv(os.path.join('results/intercept_in_large.csv'))
+    g = sns.kdeplot(data=iin, shade=False, legend=False)
+    g.axvline(3, 0, 1, color='black', lw=2, ls='--')
+    plt.savefig(join(figpath, 'intercept_in_distribution_l.png'), dpi=300)
 
-# Check for multicollinearity
+    # clear figure
+    plt.clf()
 
-iout = pd.read_csv(os.path.join('intercept_out.csv'))
-iin = pd.read_csv(os.path.join('intercept_in.csv'))
+    # plot posterior distributions of nu^2
+    iout = pd.read_csv(os.path.join('results/intercept_out_large.csv'))
+    g = sns.kdeplot(data=iout, shade=False, legend=False)
+    g.axvline(1, 0, 1, color='black', lw=2, ls='--')
+    plt.savefig(join(figpath, 'intercept_out_distribution_l.png'), dpi=300)
 
-sum = []
-for i in range(iout.shape[1]):
-    plus = iin.iloc[:,i].values + iout.iloc[:,i].values
-    sum.append(plus)
-sum = pd.DataFrame(sum).transpose()
-g = sns.kdeplot(data=sum, shade=False, legend=False)
-g.axvline(4, 0, 1, color='black', lw=2, ls='--')
-plt.savefig('Sum1.png', dpi=300)
+    # clear figure
+    plt.clf()
 
-# clear figure
-plt.clf()
+    # Check for multicollinearity
 
-iout = iout.stack().reset_index(drop=True)
-iin = iin.stack().reset_index(drop=True)
+    iout = pd.read_csv(os.path.join('results/intercept_out_large.csv'))
+    iin = pd.read_csv(os.path.join('results/intercept_in_large.csv'))
 
-corr = iin.corr(iout)
-print('The correlation between both intercept variables is:', corr)
+    sum = []
+    for i in range(iout.shape[1]):
+        plus = iin.iloc[:,i].values + iout.iloc[:,i].values
+        sum.append(plus)
+    sum = pd.DataFrame(sum).transpose()
+    g = sns.kdeplot(data=sum, shade=False, legend=False)
+    g.axvline(4, 0, 1, color='black', lw=2, ls='--')
+    plt.savefig(join(figpath, 'Sum1.png'), dpi=300)
+
+    # clear figure
+    plt.clf()
+
+    iout = iout.stack().reset_index(drop=True)
+    iin = iin.stack().reset_index(drop=True)
+
+    corr = iin.corr(iout)
+    print('The correlation between both intercept variables is:', corr)
+
+if __name__ == "__main__":
+    run_simulations(10)
+    plot_simulations()
